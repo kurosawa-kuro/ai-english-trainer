@@ -20,7 +20,7 @@ npm run test:browser
 - `src/client`: HtmlServiceの5タブ画面
 - `env/config.yaml`: 非機密設定。変更後に`npm run build:data`
 - `env/expressions`: 初期教材51件。利用開始後の教材正本は`et_expressions`シート
-- `sample/speak-kit`: 読み取り専用の移植元
+- 移植元の`sample/`は削除済み。必要な教材・処理は`env`・`src`に保持し、旧資料はGit履歴から参照
 
 導入は[配布手順](docs/08_release_runbook.md)、実装仕様は[G3仕様](docs/specs/gas-trainer-v1.md)、検証範囲は[テスト方針](docs/07_test_strategy.md)を参照してください。Makefileはstarterのままで、上記npmコマンドを使用します。
 

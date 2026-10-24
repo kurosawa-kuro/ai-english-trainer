@@ -16,7 +16,7 @@
 
 [移植構想](tasks/02_backlog/GAS基盤を流用したAI英語訓練アプリ移植構想.md)は後続検討を含む計画。[判断日誌](decisions/decision-log.md)は追記専用。[タスク運用](tasks/README.md)も参照。
 
-DBはSheets、秘密はProperties。Jdbc禁止、外部送信先はGeminiのみ。sampleは読み取り専用。今回のユーザー指定に限り日記基盤の参照・コピーを許可。配布モデルA（本人限定・各自のキー）でG3を実装し、G4・音声は範囲外とする。
+DBはSheets、秘密はProperties。Jdbc禁止、外部送信先はGeminiのみ。sampleはユーザー指示で削除済み。旧構想内のsampleへのリンクは削除前のGit履歴を参照する。今回のユーザー指定に限り日記基盤の参照・コピーを許可。配布モデルA（本人限定・各自のキー）でG3を実装し、G4・音声は範囲外とする。
 
 ## エージェント運用
 
