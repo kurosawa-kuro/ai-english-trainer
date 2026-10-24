@@ -12,7 +12,12 @@ function withLock_(fn) {
   try {
     return fn();
   } finally {
-    writeLockHeld_ = false;
-    lock.releaseLock();
+    // 入れ子では確定せず、最外側の排他区間で書込を確定する。
+    try {
+      SheetStore.flush();
+    } finally {
+      writeLockHeld_ = false;
+      lock.releaseLock();
+    }
   }
 }

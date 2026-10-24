@@ -1,73 +1,50 @@
 # AGENTS.md
 
-AI コーディングエージェント（Claude Code / Codex / GitHub Copilot 等）共通の作業ガイド。
-Codex は作業前にこのファイルを読むため、ここには repo 共通方針のみ記す。
-ツール固有の指示は各ツールのファイル（例: Claude Code は `CLAUDE.md`）に置く。
+全コーディングエージェント共通の作業規約。導入・現状・検証実績は[README](README.md)。文言・コメント・文書は日本語で書く。
 
-## プロジェクト概要
+## 範囲と正本
 
-- 目的: 英会話コミュニティの仲間へ配る **AI 英語訓練アプリ**。自由記述を AI（Gemini）が採点し、AI と会話して練習する。選択式クイズと学習記録がその土台になる
-- 主要技術: Google Apps Script ＋ Google Sheets ＋ `HtmlService` ＋ Gemini API（Google AI Studio の無料枠）
-- 配布: スプレッドシートの「コピーを作成」。相手に求めるのは Google アカウントと Gemini の鍵（AI Studio で発行。カード不要）だけ
-- **正本**: [`docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md`](docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md)。製品定義・禁止事項・未決はすべてそこ。このファイルに重複させない
-- **状態: G3ローカル実装済み。実環境受入・公開は未実施。現行仕様は `docs/specs/gas-trainer-v1.md`**
+- 製品方針は[GAS版構想](docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md)、実装の事実はコード・テストと[G3仕様](docs/specs/gas-trainer-v1.md)。構想の古い未着手・未決を現状として扱わない。
+- G3はローカル実装済み、実環境受入・公開は未実施。配布モデルA（本人限定・1人1コピー・各自のキー）を採用する。B/Cへの共有運用変更は別の判断を要する。
+- 中核はAI採点とテキスト会話。選択式クイズが動くだけで製品完成としない。音声入出力とG4は対象外。
+- 永続化はSheets、実行時の秘密はPropertiesService。関係DB・`Jdbc`は禁止。`UrlFetchApp`の宛先は`generativelanguage.googleapis.com`のみ。キーは`x-goog-api-key`ヘッダで送り、URL・画面・ログへ出さない。
+- `sample/`は削除済み。依存を復活させずGit履歴を参照する。ユーザーが明示した日記基盤の参照・コピーは例外として認められているが、それ以外の他リポジトリ探索や、他プロジェクトの接続先・秘密・計画の持込みはしない。
 
-## 絶対に破らない制約
+## 責務とデータ
 
-1. **関係データベースを採用しない**（構想 5.2）。Postgres / Supabase / Neon / Turso / Cloud SQL / MySQL は禁止。永続化は Google Sheets、秘密は `PropertiesService` だけ
-   - **`Jdbc` サービスを使わない**
-   - **`UrlFetchApp` の宛先は `generativelanguage.googleapis.com` のみ**
-2. **`sample/` はユーザー指示で削除済み**（2026-10-25）。移植元が必要な場合はGit履歴を参照する。現行実装にsampleへの依存を追加しない
-3. ユーザーが指定したAI日記アプリの基盤参照・コピーは今回の明示的例外。それ以外は **このリポジトリの外を見ない**（構想 3）。他リポジトリのパスを書かず、向こうの計画・残作業・未決を引き継がない
-4. **売り物は AI**（構想 2.2）。AI 無しの状態を完成形として扱わない
-5. **音声入出力を作らない**（構想 9）
-6. **現行実装は配布モデルA（本人限定・各自のキー）**。B/Cの共有運用へ勝手に変更しない
-7. **日本語で書く**（画面の文言・ドキュメント・コメント）
+- 配布コードは`src/`、非機密設定・初期教材は`env/`。利用開始後の教材正本はSheets。envの再生成で利用者の教材を上書きしない。
+- Domainは純粋な業務判断、Applicationは注入ポートによる処理順序、bootstrapは依存の組立。具体的GAS・Gemini依存をDomain / Applicationへ入れない。
+- Sheets書込は`db/sheet-store.js`へ集約し、`requireWriteLock_`でロック保持を検査する。公開入口はcontrollers、内部の大域関数は末尾`_`。GASの読込順に依存しない。
+- 回答・採点・能力証拠は追記台帳。要求IDと入力を照合し、同ID異内容を拒否する。証拠を先に書き、assessmentを確定点にする。最新判定と教材版を維持する。
+- キャッシュは表示の高速化用。更新判断・重複照合はfresh読取。スキーマ欠損を初期化で隠さず、バックアップと列定義を照合する。
+- 非機密設定は`env/config.yaml`、ローカル秘密はGit除外済み`env/secret.yaml`。実行時のキーは設定画面からScript Propertiesへ保存する。Doppler等の設定ファイルの存在を自動同期の実装と混同しない。
 
-## リポジトリ構成
+## レビューから得た再発防止
 
-```
-src/                 # GAS + Sheets の配布版。G3実装。配布コードはここ
-env/                 # 非機密設定・初期教材
-docs/                # 正本（構想が最上位）
-```
+| 壊れやすい前提 | 維持する実装・検証 |
+|---|---|
+| エディタで動けばWebでも保存先が取れる | 初期設定で`ET_SPREADSHEET_ID`を登録し、Webでは`openById`。activeなし・未設定・コピー先への再登録を検証。保存先変更時は旧コピーのキーを消す |
+| 書式`@`だけで入力文字列を保持できる | 文字列スキーマはRichTextで書く。先頭`=`・引用符・先頭ゼロ、セル長、更新時の主キー不変を検証 |
+| LockService＋追記なら複数表が原子的になる | キャッシュ新世代公開前と最外側のロック解除前にSheetStore経由でflush。例外時もロックと保持フラグを解放し、途中停止は要求台帳で回復 |
+| 予約できたらAIへ送ってよい | 予約確定後にロック外で呼ぶ。flush失敗時の呼出ゼロを検証。未送信pendingの再開時にもAI設定・キー・利用枠・予約日を確認 |
+| 応答がなければ同じAIを再実行してよい | 成功結果は再利用。running・unknown・failedを同IDで外部再実行しない。中止は所定の待機後、遅い応答は採用しない |
+| ブラウザ保存と時刻順だけで復旧できる | 会話の保留ID・本文・終了要求をサーバー記録から復元。採点確定順と最新判定を守り、旧要求の遅延確定で新結果を上書きしない |
+| JSON.stringifyや全テスト成功で安全と言える | 入力・AI出力は表示境界でもデータとして扱う。script内へ埋める場合はHTML終端を無害化。mockが再現しないGAS制約を実環境受入に残す |
 
-## セットアップ / 主要コマンド
+主な回帰検証は`src/tests/review.test.mjs`・`lock-safety.test.mjs`・`application.test.mjs`。境界制約は`architecture.test.mjs`。既存の再送・障害回復を壊す変更は、正常系だけで判断しない。
 
-`src`で`npm run check`と`npm run test:browser`を実行する。env変更時は`npm run build:data`。Makefileはstarterのままなので使用しない。
+## 検証と反映
 
-## コーディング規約
+コマンドは`src/`で実行する。Makefileはテンプレート。
 
-- 既存のコード・命名・パターンに合わせる。新規導入より既存の再利用を優先する。
-- 変更後はテストとフォーマッタを実行してから完了とする。
-- 禁止事項は文書だけで守らない。検査（`Jdbc` の出現ゼロ、`UrlFetchApp` の宛先、ロック無しの追記）を置く。
-- 原子性は `LockService` ＋ 追記専用で担保する。書き込み関数を 1 か所に閉じる。
-- 非機密の設定値は `env/config.yaml`、ローカル秘密情報は `env/secret.yaml`、チーム共有・本番クレデンシャルは Doppler (`doppler.yaml`)。秘密情報をコミットしない。このプロジェクトの秘密は Gemini の API キー 1 本だけで、接続文字列は存在しない。
+- 実装変更は関連テストと`npm run check`、画面変更は`npm run test:browser`。変更ファイルをPrettierで整形する。env変更後は`npm run build:data`と生成差分確認を行う。
+- 文書だけの変更はリンク・コマンド・実装との整合を確認する。過去のテスト件数を今回の実行結果として報告しない。
+- 本人限定の公開・配布・更新は[Runbook](docs/08_release_runbook.md)に従う。`npm run push`は検証と配置を行うが、Webアプリの公開版は更新しない。コピー配布は実環境受入後。
+- ローカル単体テスト、実Chromium＋模擬GAS/Gemini、実GAS/Sheets/Geminiを区別して報告する。未実行・失敗・未反映を隠さない。文書更新をpush/deployの依頼と解釈しない。
+- 作業開始時のGit差分を確認し、既存変更を破棄しない。コード・文書・生成物へ秘密情報を出さない。
 
-## ドキュメント
+## 文書とツール固有設定
 
-設計・仕様・運用は `docs/` 配下を参照。更新規約と権威順位は `docs/00_index.md` に従う。
-仕様レベルの変更は連動するドキュメントを同一 PR でまとめて直し、構想を変えたら決定ログに 1 行残す。
+[文書索引](docs/00_index.md)に従い、確定仕様は`docs/specs/`や01〜08、作業経緯は`docs/tasks/`に置く。製品方針を変えたら[判断日誌](docs/decisions/decision-log.md)へ追記する。READMEは導入と現状、本書は共通規約、CLAUDEはツール固有の入口とし、時系列ログを3か所へ複製しない。
 
-`docs/01_requirements.md` 〜 `docs/08_release_runbook.md`は現行G3実装に更新済み。実環境受入は別途必要。
-
-## Codex / Claude Code
-
-- `AGENTS.md` は Codex / 他エージェント共通ガイド。
-- `CLAUDE.md` は Claude Code の司令塔。
-- `.claude/rules/` と `.claude/skills/` は Claude Code 用。Codex が読む前提にしない。
-- Codex 向けに永続させたい recurring な指摘やミス防止は、この `AGENTS.md` または nested `AGENTS.md` に小さく追加する。
-
-## Harness（AI 制御一式）
-
-- このリポジトリの AI 制御の全体像は `.claude/README.md`（Kurosawa Thin Harness Architecture の実装）。
-- アーキ本体（tool-agnostic マスター）は `docs/specs/kurosawa-thin-harness-architecture.md`、repo 固有の脅威モデルは `docs/specs/{capability-boundary,change-boundary,runtime-protocol,evidence-policy,judgment-memory}.md`。
-- permissions の ask/deny と保護パスは脅威モデルで決める。**他プロジェクトの設定をそのまま移植しない**。
-- このリポジトリでは `psql` / `supabase` / `turso` を **deny** にしてある（上記の制約 1 の機械ゲート）。ask へ戻さない。
-
-## Task / Skill
-
-- 一回性の作業計画・調査メモ・実装タスクは `docs/tasks/` に置く。
-- Claude Code で繰り返し使う作業手順は `.claude/skills/` に置く（classify-task → create-task → scan-decisions → plan-skeleton → execute-task → verify-completion → review-task のライフサイクル）。
-- Codex repo skills を本格運用する場合は `.agents/skills/` を任意追加する。標準生成物には含めない。
-- task note を仕様の正本にしない。確定した仕様は `docs/specs/`、判断理由は `docs/adr/`、運用手順は `docs/runbooks/` に昇格する。
+[CLAUDE.md](CLAUDE.md)と`.claude/rules/`・`.claude/skills/`はClaude Code用。共通の再発防止をClaude専用設定だけに置かない。AI制御の詳細は[.claude/README](.claude/README.md)、[実行手順](docs/specs/runtime-protocol.md)・[権限境界](docs/specs/capability-boundary.md)・[変更境界](docs/specs/change-boundary.md)・[証拠方針](docs/specs/evidence-policy.md)を参照する。他プロジェクトのpermissionsを流用せず、関係DB用ツールのdenyを緩めない。

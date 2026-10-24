@@ -183,6 +183,7 @@ export function createGas({ existingSheets = [], now } = {}) {
     RegExp,
     isFinite,
     SpreadsheetApp: {
+      flush() {},
       getActiveSpreadsheet: () => ss,
       openById: (id) => {
         if (id !== "test-sheet") throw Error("保存先が異なります");

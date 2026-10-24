@@ -67,6 +67,8 @@ const TableCache = {
     return { generation: next, previous, cached };
   },
   afterWrite(token, name, rows) {
+    // 未確定の表を新世代で読まれることを防ぐ。失敗時はwritingのままにする。
+    SheetStore.flush();
     const cached = token.cached;
     if (rows && token.previous) cached[name] = token.previous.concat(rows);
     // 書込中に読んだ古い値はキャッシュしない。完了してから新世代を公開する。

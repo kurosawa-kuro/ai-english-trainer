@@ -1,6 +1,9 @@
 /** Sheets操作。列不一致では書込を停止する。 */
 const SheetStore = {
   ss_: null,
+  flush() {
+    SpreadsheetApp.flush();
+  },
   bindActive() {
     requireWriteLock_();
     const active = SpreadsheetApp.getActiveSpreadsheet();
