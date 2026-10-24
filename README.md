@@ -4,8 +4,8 @@
 
 英会話コミュニティの仲間に配る。相手に求めるのはスプレッドシートのコピーと、AI を使うための鍵だけで、GitHub も Vercel も Supabase も要らない。
 
-- 自由記述で英文を書き、「意味が伝わったか」を Claude が判定して返す
-- Claude と会話して練習する
+- 自由記述で英文を書き、「意味が伝わったか」を AI（Gemini）が判定して返す
+- AI と会話して練習する
 - 選択式クイズと学習記録は、その土台として間隔反復で回る
 - **教材は利用者が自分のスプレッドシートで編集できる**。行を 1 行足せば次の出題から出る
 
@@ -23,9 +23,9 @@
 |---|---|
 | 実行基盤 | Google Apps Script（ウェブアプリ） |
 | 画面 | `HtmlService`（単一ページ ＋ クライアント側のタブ切り替え） |
-| データ | **Google Sheets**（教材・学習記録・設定・AI 使用額） |
-| 秘密 | `PropertiesService`（Anthropic の API キー） |
-| AI | Claude API（`UrlFetchApp` でサーバー側から呼ぶ） |
+| データ | **Google Sheets**（教材・学習記録・設定・AI の利用回数） |
+| 秘密 | `PropertiesService`（Gemini の API キー） |
+| AI | Gemini API・Google AI Studio の無料枠（`UrlFetchApp` でサーバー側から呼ぶ） |
 | 認証 | Google アカウント（`appsscript.json` の `webapp.access`） |
 | **関係データベース** | **使わない。採用禁止**（下記） |
 
@@ -38,7 +38,7 @@ GAS から関係 DB に届く経路は 2 本しかないので、そこを塞ぐ
 | 規則 | 塞がるもの |
 |---|---|
 | **`Jdbc` サービスを使わない** | Cloud SQL / MySQL / SQL Server / Oracle への直接接続 |
-| **`UrlFetchApp` の宛先は `api.anthropic.com` のみ** | Supabase の REST、Neon / Turso の HTTP API、その他クラウド DB の API |
+| **`UrlFetchApp` の宛先は `generativelanguage.googleapis.com` のみ** | Supabase の REST、Neon / Turso の HTTP API、その他クラウド DB の API |
 
 理由と、Postgres が担っていた機能の代替、残る損失 3 点は構想 5.2 にある。
 
@@ -63,7 +63,7 @@ GAS から関係 DB に届く経路は 2 本しかないので、そこを塞ぐ
 
 `src/` が空のため、ビルド・デプロイの手順はまだ無い。開発の道具立て（`clasp` を使うかどうかを含む）は未決で、構想 12 章の優先度A を潰してから決める。
 
-設定は `env/config.yaml`（非機密）、`env/secret.yaml`（ローカル秘密情報）、Doppler（共有・本番）で管理する。`env/secret.yaml` は `.gitignore` で除外されるためコミットしない。**このプロジェクトの秘密は Anthropic の API キー 1 本だけ**で、接続文字列は存在しない。
+設定は `env/config.yaml`（非機密）、`env/secret.yaml`（ローカル秘密情報）、Doppler（共有・本番）で管理する。`env/secret.yaml` は `.gitignore` で除外されるためコミットしない。**このプロジェクトの秘密は Gemini の API キー 1 本だけ**で、接続文字列は存在しない。
 
 ## ドキュメント
 

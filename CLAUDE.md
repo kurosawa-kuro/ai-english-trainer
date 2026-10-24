@@ -4,7 +4,7 @@
 
 ## このリポジトリ
 
-`ai-english-trainer` は、英会話コミュニティの仲間へ配る **AI 英語訓練アプリ**。Google Apps Script ＋ Google Sheets で作り、相手に求めるのはスプレッドシートのコピーと AI の鍵だけにする。
+`ai-english-trainer` は、英会話コミュニティの仲間へ配る **AI 英語訓練アプリ**。Google Apps Script ＋ Google Sheets で作り、相手に求めるのはスプレッドシートのコピーと AI の鍵だけにする。AI は Gemini API を Google AI Studio の無料枠で使う（構想 2.2）。
 
 **正本は [`docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md`](docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md)。** 製品定義・踏襲する点・禁止事項・未決は、この README でも CLAUDE.md でもなく構想を見る。ここに重複させない。
 
@@ -16,7 +16,7 @@
 
 1. **関係データベースを採用しない**（構想 5.2）。Postgres / Supabase / Neon / Turso / Cloud SQL / MySQL は禁止。永続化は Google Sheets、秘密は `PropertiesService` だけ
    - **`Jdbc` サービスを使わない**
-   - **`UrlFetchApp` の宛先は `api.anthropic.com` のみ**。他の外部ホストへ出さない
+   - **`UrlFetchApp` の宛先は `generativelanguage.googleapis.com` のみ**。他の外部ホストへ出さない。キーは `x-goog-api-key` ヘッダで送り、URL に載せない
 2. **`sample/speak-kit/` は読む専用**（構想 3）。書き込まない。`src/` へ丸ごとコピーしない。読んで GAS 版として書き直す
 3. **このリポジトリの外を見ない**（構想 3）。他のリポジトリのパスを書かない。向こうの計画・残作業・未決を引き継がない
 4. **売り物は AI**（構想 2.2・4.5）。「AI 無しでもコアが通る」は鍵が切れても落ちないための床であって、AI 無しの状態を完成形として扱わない
@@ -28,10 +28,10 @@
 
 構想 4 章が正本。要点だけ：
 
-- **踏襲**（`sample/speak-kit/` から意味を変えずに移す）— 出題選択の規則（間隔 3・連続 2 回成功での昇格・`form` のゲート・混同優先）、追記型台帳と冪等な再送、採点の 5 判定と学習者向け文面、AI の可否 3 理由（`setting_off` / `key_missing` / `limit_reached`）、1 日 2 ドル・1 か月 20 ドルの上限と円表示
-- **新しくする** — 教材の正本を**利用者のスプレッドシート**に置く（構想 4.8）。YAML・sync・デプロイを廃止する。データモデルは Sheets ネイティブに平坦化する（30 表 → 7 枚から）
+- **踏襲**（`sample/speak-kit/` から意味を変えずに移す）— 出題選択の規則（間隔 3・連続 2 回成功での昇格・`form` のゲート・混同優先）、追記型台帳と冪等な再送、採点の 5 判定と学習者向け文面、AI の可否 3 理由（`setting_off` / `key_missing` / `limit_reached`）
+- **新しくする** — 教材の正本を**利用者のスプレッドシート**に置く（構想 4.8）。YAML・sync・デプロイを廃止する。データモデルは Sheets ネイティブに平坦化する（30 表 → 7 枚から）。AI は Claude から Gemini の無料枠へ替え、円表示・ドル上限を「無料枠で動いている」表示・回数上限・429 の扱いに作り替える（構想 4.4・D16）
 
-AI のオン・オフ、円表示、利用上限は**課金不安を軽くするための装置**であり（構想 4.4）、「AI は任意だから」の根拠に使わない。
+AI のオン・オフ、「無料枠で動いている」表示、回数上限、個人情報を書かない注意は**安心して使うための装置**であり（構想 4.4）、「AI は任意だから」の根拠に使わない。
 
 ## Source of Truth
 
@@ -92,6 +92,6 @@ Thin Harness の常時手順。詳細は `.claude/README.md` と `docs/specs/run
 上記に加えて、このリポジトリ固有のもの。
 
 - 配布モデル A / B / C に依存する設計を決めようとしたとき（構想 8.3・13-1）
-- 関係データベース、`Jdbc`、`api.anthropic.com` 以外への通信が必要に見えたとき（**まず設計が間違っている**と疑う）
+- 関係データベース、`Jdbc`、`generativelanguage.googleapis.com` 以外への通信が必要に見えたとき（**まず設計が間違っている**と疑う）
 - 構想 4 章の踏襲項目を落とす必要が出たとき（落とす項目を名指しして owner へ）
 - `sample/speak-kit/` を変更したくなったとき

@@ -9,11 +9,11 @@
   -> google.script.run.rpc(name, request)
   -> dispatch（入力の検査。操作の文脈を 1 度だけ作る）
   -> services（業務の処理。書き込みは 1 か所に閉じ、LockService を取る）
-       -> Google Sheets（教材・学習記録・設定・AI 使用額）
-       -> ai（UrlFetchApp -> api.anthropic.com）※同期
+       -> Google Sheets（教材・学習記録・設定・AI の利用回数）
+       -> ai（UrlFetchApp -> generativelanguage.googleapis.com）※同期
 ```
 
-- **操作の文脈**: 1 回の操作の最初に、設定の「AI を使う」・鍵の有無・今日と今月の使用額から AI の可否を 1 度だけ決め、サービスへ渡す。操作の途中で読み直さない（構想 4.3）
+- **操作の文脈**: 1 回の操作の最初に、設定の「AI を使う」・鍵の有無・今日の利用回数（自前の上限と 429 の記録）から AI の可否を 1 度だけ決め、サービスへ渡す。操作の途中で読み直さない（構想 4.3）
 - **採点は同期**: `UrlFetchApp` は同期で、実行上限は 6 分。参照元の遅延採点・`grading_claims`・2 秒ポーリングは持ち込まない（構想 D4）
 - **原子性**: トランザクションが無いので `LockService` ＋ 追記専用で担保する。書き込み関数を 1 か所に閉じる（構想 D3）
 - **教材の正本はシート**: 利用者が `expressions` シートを直接編集する。YAML・sync・デプロイは無い（構想 4.8）
@@ -26,9 +26,9 @@
 | RPC の入口 | 名前 → サービス。応答は参照元と同じ envelope | `src/`（未着手） |
 | 業務の処理 | 出題・回答・採点・会話・記録・設定 | `src/`（未着手） |
 | シートアクセス | 読み書きの唯一の窓口。追記専用を守る | `src/`（未着手） |
-| AI の窓口 | `UrlFetchApp` で Claude を呼ぶ**唯一の場所** | `src/`（未着手） |
+| AI の窓口 | `UrlFetchApp` で Gemini を呼ぶ**唯一の場所** | `src/`（未着手） |
 | 永続化 | Google Sheets（構成は [05_data_model.md](./05_data_model.md)） | スプレッドシート |
-| 秘密 | `PropertiesService`（Anthropic の鍵） | スクリプトプロパティ |
+| 秘密 | `PropertiesService`（Gemini の鍵） | スクリプトプロパティ |
 | 公開範囲 | `appsscript.json` の `webapp.access` / `executeAs` | `src/appsscript.json`（未着手） |
 | 参照元 | Next.js 実装の実物コピー。**読む専用** | `sample/speak-kit/` |
 | エージェントガイド | Codex / 他エージェント向けの repo ガイド | `AGENTS.md` |
@@ -43,17 +43,17 @@
 | Golden Path ステップ | 通る構成要素 | 通る境界 / データ | 単一障害点 |
 |---|---|---|---|
 | 1. コピーして初期設定 | 初期設定関数、`appsscript.json` | Google の承認、シート生成、初期教材の投入 | **OAuth 承認**。相手が止まると何も始まらない |
-| 2. 鍵を入れる | 設定画面、`PropertiesService` | スクリプトプロパティ | **Anthropic の鍵**。目玉を開ける唯一の鍵（構想 2.2） |
-| 3. 自由記述を採点 | RPC → 操作の文脈 → 採点 → AI の窓口 | `UrlFetchApp` → `api.anthropic.com`、実行上限 6 分 | **AI の窓口**。ここが落ちると目玉が止まる |
+| 2. 鍵を入れる | 設定画面、`PropertiesService` | スクリプトプロパティ | **Gemini の鍵**（Google AI Studio で発行）。目玉を開ける唯一の鍵（構想 2.2） |
+| 3. 自由記述を採点 | RPC → 操作の文脈 → 採点 → AI の窓口 | `UrlFetchApp` → `generativelanguage.googleapis.com`、実行上限 6 分 | **AI の窓口**。ここが落ちると目玉が止まる |
 | 4. 記録に残る | 書き込み関数、回答台帳シート | `LockService`、追記専用 | **書き込み関数**。ロックを取り忘れると静かに二重行（構想 5.2） |
-| 5. 利用額を見る | 使用額の集計、設定画面 | `ai_usage` シート | — |
+| 5. 利用状況を見る | 利用回数の集計、設定画面 | `ai_usage` シート | — |
 
 単一障害点が 2 と 3 に集中する。**どちらも AI 側である**ことが、この製品の性質を表している。
 
 ## 境界
 
 - **作る物は `src/` だけ。** `sample/speak-kit/` は読む専用で、書き込まない・丸ごとコピーしない（構想 3）
-- **関係データベースを使わない。** `Jdbc` を使わない。`UrlFetchApp` の宛先は `api.anthropic.com` のみ（構想 5.2）
+- **関係データベースを使わない。** `Jdbc` を使わない。`UrlFetchApp` の宛先は `generativelanguage.googleapis.com` のみ（構想 5.2）
 - AI は 1 か所からだけ呼ぶ。出題・記録・RPC の振り分けは AI の窓口を参照しない
 - AI の呼び出しは `LockService` を持たずに行う。AI の応答を得てから短く書く
 - シートへの書き込みは 1 か所に閉じる。他から `setValue` を呼ばない

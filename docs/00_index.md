@@ -29,7 +29,7 @@ docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md（正本）
 
 | # | 約束 | 根拠 |
 |---|---|---|
-| 1 | **関係データベースを採用しない**（Postgres / Supabase / Neon / Turso / Cloud SQL / MySQL）。`Jdbc` を使わない。`UrlFetchApp` の宛先は `api.anthropic.com` のみ | 構想 5.2 |
+| 1 | **関係データベースを採用しない**（Postgres / Supabase / Neon / Turso / Cloud SQL / MySQL）。`Jdbc` を使わない。`UrlFetchApp` の宛先は `generativelanguage.googleapis.com` のみ | 構想 5.2 |
 | 2 | **`sample/speak-kit/` は読む専用。** 書き込まない。`src/` へ丸ごとコピーしない | 構想 3 |
 | 3 | **このリポジトリの外を見ない。** 他リポジトリの計画・残作業・未決を引き継がない | 構想 3 |
 | 4 | **売り物は AI。** AI 無しの状態を完成形として扱わない | 構想 2.2・4.5 |

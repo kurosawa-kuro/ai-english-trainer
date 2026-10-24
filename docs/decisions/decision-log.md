@@ -36,3 +36,11 @@ task note は1タスクに閉じるので「最近このエージェントは曖
 ---
 
 _まだ判断は記録されていません。`log-decision` が末尾に追記します。_
+
+## 2026-10-24T08:00Z — Gemini 無料枠への切替に伴い、円表示・ドル上限を回数上限と 429 の扱いへ作り替えた
+- type: default-taken
+- 根拠 (why): owner が AI を Gemini API の無料枠に決めた。無料枠は請求が起きないので、金額の表示・ドル上限は守る対象を失う。不安の中身は「止まらないか・どこへ送られるか」に移るため、回数上限・429 の理由つき停止・個人情報を書かない注意に置き換えた（構想 4.4）
+- 影響範囲 (blast radius): 文書のみ（構想・docs 01〜08・README・AGENTS・CLAUDE・env/config.yaml）。`src/` は空でコードへの影響なし。可逆
+- 撤退条件 (stop/revert): owner が有料版（課金あり）も併用すると決めたら、金額計算と円表示を 4.4 に戻す
+- 結果 (outcome): open
+- link: docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md 4.4・14

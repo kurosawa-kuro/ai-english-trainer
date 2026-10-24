@@ -6,15 +6,15 @@
 
 | 置き場 | 内容 |
 |---|---|
-| Google Sheets | 教材、学習記録、設定、AI 使用額 |
-| `PropertiesService` | Anthropic の API キー |
+| Google Sheets | 教材、学習記録、設定、AI の利用回数 |
+| `PropertiesService` | Gemini の API キー |
 
 **関係データベースは採用禁止**（構想 5.2）。Postgres / Supabase / Neon / Turso / Cloud SQL / MySQL を使わない。「今は使わない」ではなく禁止で、将来の機能追加の理由にもしない。
 
 到達経路を 2 つとも塞ぐ:
 
 - **`Jdbc` サービスを使わない**
-- **`UrlFetchApp` の宛先は `api.anthropic.com` のみ**
+- **`UrlFetchApp` の宛先は `generativelanguage.googleapis.com` のみ**
 
 ## 教材の正本は利用者のスプレッドシート
 
@@ -41,7 +41,7 @@
 | `quiz_promotions` | item_key, promoted_at |
 | `review_resets` | requested_at |
 | `settings` | learner_key, ai_enabled, updated_at |
-| `ai_usage` | called_at, feature, model, input_tokens, output_tokens, cost_usd |
+| `ai_usage` | called_at, feature, model, input_tokens, output_tokens, status（429 を含む） |
 
 ### G2 以降
 
@@ -70,7 +70,7 @@
 | 共有・本番の秘密情報 | Doppler |
 | 配布先の実行時の鍵 | 各自の GAS スクリプトプロパティ |
 
-**このプロジェクトの秘密は Anthropic の API キー 1 本だけ**で、接続文字列は存在しない。
+**このプロジェクトの秘密は Gemini の API キー 1 本だけ**で、接続文字列は存在しない。
 
 ## 未決
 

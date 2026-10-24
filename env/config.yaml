@@ -7,7 +7,7 @@
 #
 # アプリの実行時の値の置き場（構想 02_architecture / 05_data_model）:
 #   - 定数（AI のモデル・上限・為替・タイムゾーン等） -> src/ のコード内 1 か所
-#   - 秘密（Anthropic の API キー）                   -> GAS の PropertiesService
+#   - 秘密（Gemini の API キー）                      -> GAS の PropertiesService
 #   - 学習データ・教材・設定                          -> Google Sheets
 #
 # ローカル秘密情報は env/secret.yaml、共有・本番クレデンシャルは Doppler (doppler.yaml)。
@@ -16,7 +16,7 @@
 # --- プロジェクト ---
 projectName: ai-english-trainer
 language: ja          # 画面の文言・ドキュメント・コメントはすべて日本語（構想 4.10）
-timeZone: Asia/Tokyo  # 当日境界と利用額の集計に使う暦（構想 4.4 / 4.6）
+timeZone: Asia/Tokyo  # 当日境界と利用回数の集計に使う暦（構想 4.4 / 4.6）
 
 # --- 実行基盤 ---
 # Google Apps Script（ウェブアプリ）+ Google Sheets。
@@ -28,7 +28,7 @@ platform: google-apps-script
 # 接続文字列を置く項目をここにも env/secret.yaml にも作らない。
 # アプリ側の経路は 2 本だけなので、そこを検査で塞ぐ（docs/07_test_strategy.md T1 / T2）:
 #   - Jdbc サービスを使わない
-#   - UrlFetchApp の宛先は api.anthropic.com のみ
+#   - UrlFetchApp の宛先は generativelanguage.googleapis.com のみ
 database: none
 
 # --- GAS の識別子（着手時に埋める。未着手のため空） ---

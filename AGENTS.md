@@ -6,9 +6,9 @@ Codex は作業前にこのファイルを読むため、ここには repo 共�
 
 ## プロジェクト概要
 
-- 目的: 英会話コミュニティの仲間へ配る **AI 英語訓練アプリ**。自由記述を Claude が採点し、Claude と会話して練習する。選択式クイズと学習記録がその土台になる
-- 主要技術: Google Apps Script ＋ Google Sheets ＋ `HtmlService` ＋ Claude API
-- 配布: スプレッドシートの「コピーを作成」。相手に求めるのは Google アカウントと AI の鍵だけ
+- 目的: 英会話コミュニティの仲間へ配る **AI 英語訓練アプリ**。自由記述を AI（Gemini）が採点し、AI と会話して練習する。選択式クイズと学習記録がその土台になる
+- 主要技術: Google Apps Script ＋ Google Sheets ＋ `HtmlService` ＋ Gemini API（Google AI Studio の無料枠）
+- 配布: スプレッドシートの「コピーを作成」。相手に求めるのは Google アカウントと Gemini の鍵（AI Studio で発行。カード不要）だけ
 - **正本**: [`docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md`](docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md)。製品定義・禁止事項・未決はすべてそこ。このファイルに重複させない
 - **状態: アイディア（未着手）。`src/` は空**
 
@@ -16,7 +16,7 @@ Codex は作業前にこのファイルを読むため、ここには repo 共�
 
 1. **関係データベースを採用しない**（構想 5.2）。Postgres / Supabase / Neon / Turso / Cloud SQL / MySQL は禁止。永続化は Google Sheets、秘密は `PropertiesService` だけ
    - **`Jdbc` サービスを使わない**
-   - **`UrlFetchApp` の宛先は `api.anthropic.com` のみ**
+   - **`UrlFetchApp` の宛先は `generativelanguage.googleapis.com` のみ**
 2. **`sample/speak-kit/` は読む専用**（構想 3）。書き込まない。`src/` へ丸ごとコピーせず、読んで GAS 版として書き直す
 3. **このリポジトリの外を見ない**（構想 3）。他リポジトリのパスを書かず、向こうの計画・残作業・未決を引き継がない
 4. **売り物は AI**（構想 2.2）。AI 無しの状態を完成形として扱わない
@@ -42,7 +42,7 @@ docs/                # 正本（構想が最上位）
 - 変更後はテストとフォーマッタを実行してから完了とする。
 - 禁止事項は文書だけで守らない。検査（`Jdbc` の出現ゼロ、`UrlFetchApp` の宛先、ロック無しの追記）を置く。
 - 原子性は `LockService` ＋ 追記専用で担保する。書き込み関数を 1 か所に閉じる。
-- 非機密の設定値は `env/config.yaml`、ローカル秘密情報は `env/secret.yaml`、チーム共有・本番クレデンシャルは Doppler (`doppler.yaml`)。秘密情報をコミットしない。このプロジェクトの秘密は Anthropic の API キー 1 本だけで、接続文字列は存在しない。
+- 非機密の設定値は `env/config.yaml`、ローカル秘密情報は `env/secret.yaml`、チーム共有・本番クレデンシャルは Doppler (`doppler.yaml`)。秘密情報をコミットしない。このプロジェクトの秘密は Gemini の API キー 1 本だけで、接続文字列は存在しない。
 
 ## ドキュメント
 
