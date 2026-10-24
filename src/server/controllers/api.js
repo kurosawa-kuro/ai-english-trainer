@@ -123,6 +123,7 @@ function rpc(name, request) {
       error instanceof AppError ? error.code : "internal",
       {},
       {
+        ai_request_id: error instanceof AppError ? error.aiRequestId : null,
         message:
           error instanceof AppError
             ? error.message

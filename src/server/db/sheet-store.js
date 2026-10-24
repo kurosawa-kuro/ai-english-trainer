@@ -1,8 +1,35 @@
-/** Sheets操作。旧表は読取専用。列不一致では書込を停止する。 */
+/** Sheets操作。列不一致では書込を停止する。 */
 const SheetStore = {
   ss_: null,
+  bindActive() {
+    requireWriteLock_();
+    const active = SpreadsheetApp.getActiveSpreadsheet();
+    if (!active)
+      throw new AppError(
+        "setup_required",
+        "教材のスプレッドシートから初期設定を実行してください。",
+      );
+    const props = PropertiesService.getScriptProperties();
+    const previous = props.getProperty("ET_SPREADSHEET_ID");
+    if (previous && previous !== active.getId())
+      props.deleteProperty("GEMINI_API_KEY");
+    props.setProperty("ET_SPREADSHEET_ID", active.getId());
+    this.ss_ = active;
+    TableCache.clear();
+  },
   spreadsheet() {
-    if (!this.ss_) this.ss_ = SpreadsheetApp.getActiveSpreadsheet();
+    if (!this.ss_) {
+      const id =
+        PropertiesService.getScriptProperties().getProperty(
+          "ET_SPREADSHEET_ID",
+        );
+      if (!id)
+        throw new AppError(
+          "setup_required",
+          "スプレッドシートから初期設定を実行し、保存先を登録してください。",
+        );
+      this.ss_ = SpreadsheetApp.openById(id);
+    }
     return this.ss_;
   },
   url() {
@@ -113,6 +140,7 @@ const SheetStore = {
     );
     if (normalized.some((r) => !r[def.key]))
       throw new AppError("validation_error", "必須IDがありません。");
+    this.validateCells_(normalized.map((r) => def.columns.map((c) => r[c])));
     this.assertUnique_(name, this.readFresh(name).concat(normalized));
     const token = TableCache.beforeWrite(name),
       start = sheet.getLastRow() + 1,
@@ -120,7 +148,10 @@ const SheetStore = {
     if (needed > 0) sheet.insertRowsAfter(sheet.getMaxRows(), needed);
     const range = sheet.getRange(start, 1, rows.length, def.columns.length);
     range.setNumberFormats(rows.map(() => this.format_(name)));
-    range.setValues(normalized.map((r) => def.columns.map((c) => r[c])));
+    this.writeText_(
+      range,
+      normalized.map((r) => def.columns.map((c) => r[c])),
+    );
     TableCache.afterWrite(token, name, normalized);
   },
   update(name, key, values) {
@@ -138,6 +169,12 @@ const SheetStore = {
     const index = matches[0],
       row = this.rows_(name, [raw[0], raw[index]])[0],
       next = { ...row, ...values };
+    if (String(next[def.key] || "") !== String(key))
+      throw new AppError(
+        "validation_error",
+        "既存レコードのIDは変更できません。",
+      );
+    this.validateCells_([def.columns.map((c) => next[c] ?? "")]);
     this.assertUnique_(
       name,
       this.rows_(name, raw).map((r) => (r[def.key] === String(key) ? next : r)),
@@ -150,7 +187,9 @@ const SheetStore = {
       def.columns.length,
     );
     range.setNumberFormats([this.format_(name)]);
-    range.setValues([def.columns.map((c) => (next[c] == null ? "" : next[c]))]);
+    this.writeText_(range, [
+      def.columns.map((c) => (next[c] == null ? "" : next[c])),
+    ]);
     TableCache.afterWrite(token, name);
   },
   removeWhere(name, column, value) {
@@ -165,6 +204,23 @@ const SheetStore = {
       if (String(raw[r][index]) === String(value))
         this.sheet(name).deleteRow(r + 1);
     TableCache.afterWrite(token, name);
+  },
+  validateCells_(values) {
+    if (values.some((row) => row.some((v) => String(v).length > 45000)))
+      throw new AppError(
+        "validation_error",
+        "保存内容がセルの上限を超えています。",
+      );
+  },
+  writeText_(range, values) {
+    // setValuesは先頭=を数式として解釈する。入力・AI出力を文字列として保存する。
+    range.setRichTextValues(
+      values.map((row) =>
+        row.map((value) =>
+          SpreadsheetApp.newRichTextValue().setText(String(value)).build(),
+        ),
+      ),
+    );
   },
   missingTables() {
     return Object.keys(TABLES).filter((n) => !this.sheet(n));

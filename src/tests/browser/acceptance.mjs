@@ -99,6 +99,103 @@ try {
       ),
       true,
     );
+    // 未送信の下書きはタブ移動で失わない。
+    await page.getByRole("button", { name: "練習", exact: true }).click();
+    await page.locator("#next").click();
+    await page.locator("#answer").fill("My draft before sending.");
+    await page.getByRole("button", { name: "今日", exact: true }).click();
+    await page.getByRole("button", { name: "練習", exact: true }).click();
+    assert.equal(
+      await page.locator("#answer").inputValue(),
+      "My draft before sending.",
+    );
+    await page.getByRole("button", { name: "会話", exact: true }).click();
+    await page.locator("#new-talk").click();
+    await page.locator("#start-talk").click();
+    await page.locator("#transcript .bubble").first().waitFor();
+    gas.run(
+      'EnglishAiProvider.call=()=>({ok:false,code:"transport_or_permission_error"})',
+    );
+    await page.locator("#message").fill("Preserve this original message.");
+    await page.locator("#send-talk").click();
+    await page.waitForFunction(() => !document.querySelector("#error").hidden);
+    const requestId = await page.locator("#abandon-id").inputValue();
+    assert.match(requestId, /^turn-/);
+    // 新しいブラウザタブ相当：sessionStorageを消してもサーバーから元の要求を復元する。
+    await page.evaluate(() => sessionStorage.clear());
+    await page.reload();
+    await page.getByRole("button", { name: "記録", exact: true }).click();
+    await page.locator("#sessions button").first().click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#message").value ===
+        "Preserve this original message.",
+    );
+    assert.equal(await page.locator("#message").getAttribute("readonly"), "");
+    await page.locator("#talk-consent").check();
+    await page.locator("#send-talk").click();
+    await page.waitForFunction(() => !document.querySelector("#error").hidden);
+    assert.equal(await page.locator("#abandon-id").inputValue(), requestId);
+    gas.clock.advance(16 * 60000);
+    await page.getByRole("button", { name: "設定", exact: true }).click();
+    if ((await page.locator("#settings details").getAttribute("open")) === null)
+      await page.locator("#settings summary").click();
+    await page.locator("#abandon").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#notice").textContent.includes("中止しました"),
+    );
+    await page.getByRole("button", { name: "会話", exact: true }).click();
+    await page.waitForFunction(
+      () => !document.querySelector("#message").readOnly,
+    );
+    gas.run(
+      'EnglishAiProvider.call=()=>({ok:true,result:{reply:"Recovered reply.",feedback:""}})',
+    );
+    await page.locator("#message").fill("A new turn after abandonment.");
+    await page.locator("#send-talk").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#transcript")
+        .textContent.includes("Recovered reply."),
+    );
+    // 終了要求のunknownも元IDを復元し、中止後は新IDで振り返りできる。
+    gas.run(
+      'EnglishAiProvider.call=()=>({ok:false,code:"transport_or_permission_error"})',
+    );
+    await page.locator("#end-talk").click();
+    await page.waitForFunction(() => !document.querySelector("#error").hidden);
+    const endingId = await page.locator("#abandon-id").inputValue();
+    assert.match(endingId, /^end-/);
+    await page.evaluate(() => sessionStorage.clear());
+    await page.reload();
+    await page.getByRole("button", { name: "記録", exact: true }).click();
+    await page.locator("#sessions button").first().click();
+    await page.locator("#talk-consent").check();
+    await page.locator("#end-talk").click();
+    await page.waitForFunction(() => !document.querySelector("#error").hidden);
+    assert.equal(await page.locator("#abandon-id").inputValue(), endingId);
+    gas.clock.advance(16 * 60000);
+    await page.getByRole("button", { name: "設定", exact: true }).click();
+    if ((await page.locator("#settings details").getAttribute("open")) === null)
+      await page.locator("#settings summary").click();
+    await page.locator("#abandon").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#notice").textContent.includes("中止しました"),
+    );
+    gas.run(
+      'EnglishAiProvider.call=()=>({ok:true,result:{summary:"復旧して終了しました。",candidates:[]}})',
+    );
+    await page.getByRole("button", { name: "会話", exact: true }).click();
+    await page.locator("#end-talk").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#transcript")
+        .textContent.includes("復旧して終了しました。"),
+    );
+    await page.getByRole("button", { name: "記録", exact: true }).click();
+    await page.waitForFunction(
+      () => document.querySelectorAll("#records-list .record").length === 2,
+    );
     assert.deepEqual(errors, []);
     mkdirSync("test-results", { recursive: true });
     await page.screenshot({

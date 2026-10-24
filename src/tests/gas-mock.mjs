@@ -55,16 +55,34 @@ function makeSheet(name) {
               return cell ? cell.v : "";
             }),
           ),
+        getFormulas: () =>
+          Array.from({ length: nr }, (_, i) =>
+            Array.from(
+              { length: nc },
+              (_, j) => at(r - 1 + i, c - 1 + j).formula || "",
+            ),
+          ),
         setValues: (values) => {
           values.forEach((row, i) =>
             row.forEach((v, j) => {
               const cell = at(r - 1 + i, c - 1 + j);
+              cell.formula =
+                typeof v === "string" && v.startsWith("=") ? v : "";
               cell.v =
                 cell.f !== "@" &&
                 typeof v === "string" &&
                 /^-?\d+(\.\d+)?$/.test(v)
                   ? Number(v)
                   : v;
+            }),
+          );
+          return range;
+        },
+        setRichTextValues: (values) => {
+          values.forEach((row, i) =>
+            row.forEach((v, j) => {
+              at(r - 1 + i, c - 1 + j).v = v.text;
+              at(r - 1 + i, c - 1 + j).formula = "";
             }),
           );
           return range;
@@ -131,6 +149,7 @@ export function createGas({ existingSheets = [], now } = {}) {
   const pad = (n) => String(n).padStart(2, "0");
   const jst = (d) => new Date(d.getTime() + 9 * 3600e3); // Asia/Tokyo 固定の簡易版
   const ss = {
+    getId: () => "test-sheet",
     getSheetByName: (n) => sheets.get(n) || null,
     insertSheet: (n) => {
       const s = makeSheet(n);
@@ -163,7 +182,23 @@ export function createGas({ existingSheets = [], now } = {}) {
     Error,
     RegExp,
     isFinite,
-    SpreadsheetApp: { getActiveSpreadsheet: () => ss },
+    SpreadsheetApp: {
+      getActiveSpreadsheet: () => ss,
+      openById: (id) => {
+        if (id !== "test-sheet") throw Error("保存先が異なります");
+        return ss;
+      },
+      newRichTextValue: () => {
+        let text = "";
+        return {
+          setText(v) {
+            text = v;
+            return this;
+          },
+          build: () => ({ text }),
+        };
+      },
+    },
     Session: { getScriptTimeZone: () => "Asia/Tokyo" },
     Utilities: {
       Charset: { UTF_8: "UTF_8" },

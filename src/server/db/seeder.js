@@ -13,6 +13,7 @@ const Seeder = {
   },
   initialize() {
     return withLock_(() => {
+      SheetStore.bindActive();
       const props = PropertiesService.getScriptProperties();
       if (props.getProperty("ET_SCHEMA_VERSION") === "1") {
         SheetStore.validate();

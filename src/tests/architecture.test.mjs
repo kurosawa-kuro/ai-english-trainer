@@ -35,7 +35,11 @@ test("外部送信はGemini窓口のみ、DB経路を持ち込まない", () => 
 test("Sheets書込・クライアントRPCの窓口を集約", () => {
   for (const f of files("server"))
     if (f !== "server/db/sheet-store.js")
-      assert.doesNotMatch(read(f), /\.setValues?\(|\.deleteRow\(/, f);
+      assert.doesNotMatch(
+        read(f),
+        /\.setValues?\(|\.setRichTextValues?\(|\.deleteRow\(/,
+        f,
+      );
   for (const f of files("client"))
     if (f !== "client/core/api.html")
       assert.doesNotMatch(read(f), /google\.script\.run/, f);

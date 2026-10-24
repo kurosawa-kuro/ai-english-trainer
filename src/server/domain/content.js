@@ -31,6 +31,11 @@ const ContentPolicy = {
     ]) {
       const q = quiz[type];
       if (!q) continue;
+      if (typeof q !== "object" || Array.isArray(q))
+        throw new AppError(
+          "invalid_content",
+          "クイズはオブジェクトで指定してください。",
+        );
       if (
         !Array.isArray(q.near) ||
         q.near.length < 1 ||
@@ -52,6 +57,7 @@ const ContentPolicy = {
       if (
         typeof correct !== "string" ||
         !correct.trim() ||
+        correct.length > 2000 ||
         new Set([correct, ...q.near]).size !== q.near.length + 1
       )
         throw new AppError(
@@ -65,6 +71,13 @@ const ContentPolicy = {
         ),
         text,
       }));
+      if (
+        q.prompt != null &&
+        (typeof q.prompt !== "string" ||
+          !q.prompt.trim() ||
+          q.prompt.length > 2000)
+      )
+        throw new AppError("invalid_content", "設問文が不正です。");
       items.push({
         ...base,
         key: "QZ-" + prefix + "-" + row.id,

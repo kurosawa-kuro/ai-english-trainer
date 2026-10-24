@@ -1,13 +1,7 @@
 /** SQL優先キーの純粋な比較。乱数とJST日付は外側から渡す。 */
 const QuizPolicy = {
   states(items, attempts, resetAt, dayOf, today, recalled = []) {
-    const sorted = attempts
-      .filter((a) => a.response_mode === "choice")
-      .slice()
-      .sort(
-        (a, b) =>
-          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
-      );
+    const sorted = attempts.filter((a) => a.response_mode === "choice").slice();
     const current = sorted.filter((a) => a.created_at > resetAt);
     const byId = new Map(items.map((i) => [i.id, i]));
     const enriched = current.map((a, index) => ({
@@ -67,9 +61,16 @@ const QuizPolicy = {
     });
   },
   choose(states, random) {
-    const eligible = states
-      .filter((s) => !s.stable && !s.gated)
-      .map((s) => ({ ...s, tie: random() }));
+    const unfinished = states.filter((s) => !s.stable && !s.gated);
+    if (!unfinished.length) return null;
+    // 残りが少ない時も3問の間隔を作れるよう、安定済みの問題を間に挟む。
+    const spacers = unfinished.every((s) => s.rank[0] === 1)
+      ? states.filter((s) => s.stable && !s.gated && s.rank[0] === 0)
+      : [];
+    const eligible = (spacers.length ? spacers : unfinished).map((s) => ({
+      ...s,
+      tie: random(),
+    }));
     eligible.sort((a, b) => {
       for (let i = 0; i < a.rank.length; i++)
         if (a.rank[i] !== b.rank[i]) return a.rank[i] - b.rank[i];

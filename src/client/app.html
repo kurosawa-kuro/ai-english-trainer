@@ -13,6 +13,9 @@
       turn: null,
       end: null,
       busy: false,
+      draftAnswer: "",
+      draftMessage: "",
+      choiceDraft: "",
     };
     try {
       Object.assign(
@@ -32,6 +35,9 @@
             start: state.start,
             turn: state.turn,
             end: state.end,
+            draftAnswer: state.draftAnswer,
+            draftMessage: state.draftMessage,
+            choiceDraft: state.choiceDraft,
           }),
         );
       } catch {}
@@ -57,8 +63,11 @@
         : state.attempt
           ? "grade-" + state.attempt.attempt_id
           : "";
-      const id = state.tab === "talk" ? talkId : gradeId;
-      if (id && ["ai_unknown", "ai_running", "ai_pending"].includes(e.code)) {
+      const id = e.aiRequestId || (state.tab === "talk" ? talkId : gradeId);
+      if (
+        id &&
+        ["ai_unknown", "ai_running", "ai_pending", "busy"].includes(e.code)
+      ) {
         $("error").textContent += "\n要求ID：" + id;
         $("abandon-id").value = id;
       }
@@ -66,12 +75,15 @@
     async function action(button, fn) {
       if (state.busy) return;
       state.busy = true;
+      ++state.seq;
+      const originTab = state.tab;
+      sync();
       button.disabled = true;
       $("error").hidden = true;
       try {
         await fn();
       } catch (e) {
-        error(e);
+        if (state.tab === originTab) error(e);
       } finally {
         state.busy = false;
         button.disabled = false;
@@ -88,13 +100,22 @@
         .querySelectorAll('input[name="option"]')
         .forEach((n) => (n.disabled = Boolean(state.attempt)));
       $("send-talk").disabled =
-        state.busy || !state.session || state.session.state !== "open";
+        state.busy ||
+        !state.session ||
+        state.session.state !== "open" ||
+        Boolean(state.start);
       $("end-talk").disabled =
-        state.busy || !state.session || state.session.state === "closed";
+        state.busy ||
+        !state.session ||
+        state.session.state === "closed" ||
+        Boolean(state.turn) ||
+        Boolean(state.start);
       $("start-talk").disabled =
         state.busy || Boolean(state.session && !state.start);
       $("new-talk").hidden = !state.session || state.session.state !== "closed";
       $("message").readOnly = Boolean(state.turn);
+      $("scenario").disabled =
+        state.busy || Boolean(state.start) || Boolean(state.session);
     }
     async function switchTab(tab, history = true) {
       state.tab = tab;
@@ -118,6 +139,10 @@
             ...[
               ["回答", result.total],
               ["判定済み", result.graded],
+              [
+                "覚えたクイズ",
+                result.quiz.stableCount + " / " + result.quiz.itemCount,
+              ],
             ].map(([label, n]) => {
               const d = node("div", label);
               d.append(node("strong", String(n)));
@@ -153,8 +178,10 @@
       if (!item) return;
       $("prompt").textContent = item.prompt;
       $("pattern").textContent = item.form || "";
+      $("mode").value = item.mode || "choice";
       $("exercise-label").textContent =
         $("mode").selectedOptions[0].textContent;
+      $("regrade").hidden = !state.attempt || Boolean(item.options);
       $("options").replaceChildren();
       $("answer-label").hidden = Boolean(item.options);
       for (const option of item.options || []) {
@@ -163,11 +190,17 @@
         r.type = "radio";
         r.name = "option";
         r.value = option.id;
-        r.checked = state.attempt?.selected_option_id === option.id;
+        r.checked =
+          (state.attempt?.selected_option_id || state.choiceDraft) ===
+          option.id;
+        r.onchange = () => {
+          state.choiceDraft = r.value;
+          persist();
+        };
         l.append(r, document.createTextNode(" " + option.text));
         $("options").append(l);
       }
-      $("answer").value = state.attempt?.answer_text || "";
+      $("answer").value = state.attempt?.answer_text || state.draftAnswer;
       sync();
     }
     function showResult(result) {
@@ -180,6 +213,8 @@
       state.attempt = null;
       state.regrade = null;
       state.item = null;
+      state.draftAnswer = "";
+      state.choiceDraft = "";
       $("submit").disabled = true;
       persist();
       sync();
@@ -194,6 +229,8 @@
         );
         if (seq !== state.seq) return;
         state.item = result.item;
+        state.draftAnswer = "";
+        state.choiceDraft = "";
         state.attempt = null;
         state.regrade = null;
         $("feedback").textContent = "";
@@ -252,11 +289,26 @@
           });
           showResult(result);
         } catch (e) {
-          if (e.code === "ai_failed") state.regrade = null;
+          if (["ai_failed", "ai_abandoned"].includes(e.code))
+            state.regrade = null;
           throw e;
         }
       });
     function renderTalk(result) {
+      state.turn = result.pendingTurn
+        ? {
+            session_id: result.sessionId,
+            turn_id: result.pendingTurn.turn_id,
+            message: result.pendingTurn.message,
+          }
+        : null;
+      state.end = result.closingRequestId
+        ? { session_id: result.sessionId, request_id: result.closingRequestId }
+        : null;
+      state.start = null;
+      if (state.turn) state.draftMessage = state.turn.message;
+      $("message").value = state.turn?.message || state.draftMessage;
+      if (result.scenario) $("scenario").value = result.scenario;
       if (!result.turns?.length && result.state === "open") {
         if (["failed", "abandoned"].includes(result.openingState)) {
           state.session = null;
@@ -299,7 +351,10 @@
           renderTalk(result);
           state.start = null;
         } catch (e) {
-          if (e.code === "ai_failed") state.start = null;
+          if (["ai_failed", "ai_abandoned"].includes(e.code)) {
+            state.start = null;
+            state.session = null;
+          }
           throw e;
         }
       });
@@ -318,6 +373,7 @@
             consent: $("talk-consent").checked,
           });
           state.turn = null;
+          state.draftMessage = "";
           $("message").value = "";
           renderTalk(result);
         } catch (e) {
@@ -325,12 +381,20 @@
             [
               "validation_error",
               "ai_failed",
+              "ai_abandoned",
               "limit_reached",
               "setting_off",
               "key_missing",
             ].includes(e.code)
           )
             state.turn = null;
+          try {
+            renderTalk(
+              await TrainerApi.call("english_trainer_get_talk_v1", {
+                session_id: state.session.sessionId,
+              }),
+            );
+          } catch {}
           throw e;
         }
       });
@@ -353,16 +417,27 @@
           if (
             [
               "ai_failed",
+              "ai_abandoned",
               "limit_reached",
               "setting_off",
               "key_missing",
             ].includes(e.code)
           )
             state.end = null;
+          try {
+            renderTalk(
+              await TrainerApi.call("english_trainer_get_talk_v1", {
+                session_id: state.session.sessionId,
+              }),
+            );
+          } catch {}
           throw e;
         }
       });
     $("new-talk").onclick = () => {
+      if (state.busy) return;
+      state.draftMessage = "";
+      $("message").value = "";
       state.session = null;
       state.start = null;
       state.turn = null;
@@ -372,6 +447,25 @@
       sync();
     };
     function renderRecords(result) {
+      const names = {
+        RECOGNITION: "意味の理解",
+        CONTROLLED_RECALL: "思い出して回答",
+        FREE_PRODUCTION: "自由作文",
+        SLOT_REPLACEMENT: "型の練習",
+        CONTRAST_SELECTION: "使い分け",
+      };
+      $("capabilities").textContent =
+        Object.entries(result.capabilities)
+          .map(
+            ([key, v]) =>
+              (names[key] || key) +
+              "：成功 " +
+              v.successes +
+              " / " +
+              v.attempts +
+              " 回",
+          )
+          .join("、") || "まだ記録がありません。";
       $("records-list").replaceChildren();
       for (const r of result.records) {
         const a = node("article", null, "record");
@@ -425,8 +519,19 @@
       }
       $("sessions").replaceChildren();
       for (const s of result.sessions) {
-        const b = node("button", s.scenario + " · " + s.state);
+        const b = node(
+          "button",
+          ({ teacher: "先生", learner: "仲間", free_talk: "自由会話" }[
+            s.scenario
+          ] || s.scenario) +
+            " · " +
+            ({ open: "会話中", closing: "振り返り待ち", closed: "終了" }[
+              s.state
+            ] || s.state),
+        );
         b.onclick = () => {
+          if (state.busy) return;
+          state.draftMessage = "";
           state.session = { sessionId: s.id, state: s.state };
           state.start = null;
           state.turn = null;
@@ -441,7 +546,16 @@
         const row = node("article");
         row.append(
           node("strong", c.pattern),
-          node("p", c.meaning + " / " + c.state),
+          node(
+            "p",
+            c.meaning +
+              " / " +
+              ({
+                pending: "確認待ち",
+                approved: "承認済み",
+                rejected: "見送り",
+              }[c.state] || c.state),
+          ),
         );
         for (const [label, decision] of [
           ["承認", "approved"],
@@ -499,21 +613,34 @@
       action($("delete-key"), () => saveSettings(true));
     $("abandon").onclick = () =>
       action($("abandon"), async () => {
-        await TrainerApi.call("english_trainer_abandon_ai_v1", {
-          ai_request_id: $("abandon-id").value,
+        const id = $("abandon-id").value;
+        const result = await TrainerApi.call("english_trainer_abandon_ai_v1", {
+          ai_request_id: id,
         });
-        state.turn = null;
-        state.regrade = null;
-        state.end = null;
-        if ($("abandon-id").value === "opening-" + state.start?.session_id) {
+        $("notice").hidden = false;
+        if (result.state !== "abandoned") {
+          $("notice").textContent =
+            "要求は既に確定しています。同じ要求を再送して結果を確認してください。";
+          return;
+        }
+        if (id === "turn-" + state.turn?.turn_id) state.turn = null;
+        if (id === "regrade-" + state.regrade?.regrade_id) state.regrade = null;
+        if (id === "end-" + state.end?.request_id) state.end = null;
+        if (id === "opening-" + state.start?.session_id) {
           state.start = null;
           state.session = null;
         }
-        $("message").readOnly = false;
-        $("notice").hidden = false;
         $("notice").textContent =
           "要求を中止しました。新しい要求でやり直せます。";
       });
+    $("answer").oninput = () => {
+      state.draftAnswer = $("answer").value;
+      persist();
+    };
+    $("message").oninput = () => {
+      state.draftMessage = $("message").value;
+      persist();
+    };
     $("refresh-records").onclick = () => switchTab("records");
     let resetId = null;
     $("reset-review").onclick = () =>

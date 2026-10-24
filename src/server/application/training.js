@@ -5,14 +5,12 @@ function createTrainingApplication_(p) {
     if (!r) throw new AppError("not_found", "問題が見つかりません。");
     return { ...JSON.parse(r.payload_json), id: r.id };
   }
-  function committed(attemptId) {
-    return repo
-      .all("assessments")
-      .filter((a) => a.attempt_id === attemptId)
-      .sort(
-        (a, b) =>
-          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
-      );
+  function nextLearningTime() {
+    const last = [...repo.all("attempts"), ...repo.all("review_resets")].reduce(
+      (time, r) => Math.max(time, Date.parse(r.created_at) || 0),
+      0,
+    );
+    return new Date(Math.max(p.now(), last + 1)).toISOString();
   }
   function commit(attempt, problem, result, requestId) {
     return p.lock(() => {
@@ -68,6 +66,7 @@ function createTrainingApplication_(p) {
           "個人情報・機密情報を含まないことを確認してください。回答は保存済みです。",
         );
       observation = p.ai.run(requestId, "grade", {
+        attemptId: attempt.id,
         problem,
         answer: attempt.answer,
       });
@@ -105,7 +104,10 @@ function createTrainingApplication_(p) {
           .map((r) => r.created_at)
           .sort()
           .at(-1) || "";
-      const assessmentIds = new Set(repo.all("assessments").map((a) => a.id));
+      const latest = new Map();
+      for (const assessment of repo.all("assessments"))
+        latest.set(assessment.attempt_id, assessment.id);
+      const assessmentIds = new Set(latest.values());
       const recalled = repo
         .all("evidence")
         .filter(
@@ -172,7 +174,7 @@ function createTrainingApplication_(p) {
       };
     },
     submit(request) {
-      const id = requireId_(request.attempt_id),
+      const id = requireId_(request.attempt_id, 100),
         problem = item(request.item_id || request.exercise_instance_id);
       const answer = requireText_(
         request.response_mode === "choice"
@@ -212,17 +214,31 @@ function createTrainingApplication_(p) {
             item_id: problem.id,
             response_mode: problem.kind,
             answer,
-            created_at: p.iso(),
+            created_at: nextLearningTime(),
           })
         );
       });
       return grade(attempt, problem, "grade-" + id, request.consent);
     },
     regrade(request) {
-      const attempt = repo.find("attempts", requireId_(request.attempt_id));
+      const attempt = repo.find(
+        "attempts",
+        requireId_(request.attempt_id, 100),
+      );
       if (!attempt || attempt.response_mode !== "free_text")
         throw new AppError("not_found", "自由記述の回答がありません。");
-      const id = "regrade-" + requireId_(request.regrade_id);
+      const id = "regrade-" + requireId_(request.regrade_id, 100);
+      // 保存済みAI結果を先に確定する。古い採点の遅延確定で再判定を上書きしない。
+      for (const previous of repo.all("ai_requests")) {
+        if (
+          previous.feature !== "grade" ||
+          previous.state !== "succeeded" ||
+          JSON.parse(previous.snapshot_json).input.attemptId !== attempt.id ||
+          repo.find("assessments", "assessment-" + previous.id)
+        )
+          continue;
+        grade(attempt, item(attempt.item_id), previous.id, request.consent);
+      }
       const bound = p.lock(() => {
         const hash = p.hash({ attempt: attempt.id });
         const old = repo.find("operations", id);
@@ -244,20 +260,6 @@ function createTrainingApplication_(p) {
           })
         );
       });
-      const inflight = repo
-        .all("ai_requests")
-        .find(
-          (r) =>
-            ["running", "unknown"].includes(r.state) &&
-            r.id !== id &&
-            JSON.parse(r.snapshot_json).input?.answer === attempt.answer &&
-            JSON.parse(r.snapshot_json).input?.problem?.id === attempt.item_id,
-        );
-      if (inflight)
-        throw new AppError(
-          "ai_pending",
-          "先の採点を確認または中止してから再判定してください。",
-        );
       const result = grade(attempt, item(attempt.item_id), id, request.consent);
       p.lock(() =>
         repo.update("operations", bound.id, {
@@ -269,13 +271,11 @@ function createTrainingApplication_(p) {
       return result;
     },
     progress() {
+      const catalog = p.catalog.current();
       const assessments = repo.all("assessments");
       const latest = new Map();
-      for (const a of assessments.sort(
-        (a, b) =>
-          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
-      ))
-        latest.set(a.attempt_id, a);
+      // ロック下で追記した行順を確定順とする。時刻同値をランダムIDで並べ替えない。
+      for (const a of assessments) latest.set(a.attempt_id, a);
       const attempts = repo.all("attempts");
       const itemMap = new Map(
         repo.all("items").map((i) => [i.id, JSON.parse(i.payload_json)]),
@@ -295,9 +295,39 @@ function createTrainingApplication_(p) {
             ? JSON.parse(latest.get(a.id).result_json)
             : null,
         }));
+      const latestIds = new Set([...latest.values()].map((a) => a.id));
+      const capabilities = {};
+      for (const e of repo.all("evidence")) {
+        if (!latestIds.has(e.assessment_id)) continue;
+        const group = (capabilities[e.capability] ||= {
+          attempts: 0,
+          successes: 0,
+        });
+        group.attempts++;
+        if (e.success === "true") group.successes++;
+      }
+      const reset =
+        repo
+          .all("review_resets")
+          .map((r) => r.created_at)
+          .sort()
+          .at(-1) || "";
+      const activeIds = new Set(catalog.items.map((i) => i.id));
+      const quizStates = QuizPolicy.states(
+        repo.all("items").filter((i) => i.kind === "choice"),
+        attempts,
+        reset,
+        p.day,
+        p.day(p.now()),
+      ).filter((s) => activeIds.has(s.item.id));
       return {
         total: attempts.length,
         graded: latest.size,
+        capabilities,
+        quiz: {
+          stableCount: quizStates.filter((s) => s.stable).length,
+          itemCount: quizStates.length,
+        },
         records,
         ai: p.ai.status(),
         sessions: repo.all("talk_sessions").slice().reverse(),
@@ -306,8 +336,8 @@ function createTrainingApplication_(p) {
     },
     reset(request) {
       return p.lock(() => {
-        const id = requireId_(request.request_id);
-        repo.add("review_resets", { id, created_at: p.iso() });
+        const id = requireId_(request.request_id, 100);
+        repo.add("review_resets", { id, created_at: nextLearningTime() });
         return { reset: true };
       });
     },

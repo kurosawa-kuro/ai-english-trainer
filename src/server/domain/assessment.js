@@ -44,7 +44,7 @@ const AssessmentPolicy = {
       o.speech_act_match !== "yes"
     )
       return "fail_communication";
-    if (targetRequired && o.target_pattern_status === "not_used")
+    if (targetRequired && o.target_pattern_status !== "used")
       return "retry_target";
     if (targetRequired && o.issues.some((i) => i.affects_target_skill))
       return "retry_form";

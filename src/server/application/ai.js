@@ -56,7 +56,6 @@ function createAiApplication_(p) {
           ) {
             repo.update("ai_requests", id, {
               state: "unknown",
-              updated_at: String(p.now()),
             });
             r = { ...r, state: "unknown" };
           }
@@ -66,8 +65,55 @@ function createAiApplication_(p) {
               r.state === "running"
                 ? "AIが処理中です。同じ要求で確認してください。"
                 : "この要求は再実行しません。結果不明なら時間を置いて中止し、新しい要求でやり直してください。",
+              id,
+            );
+          const status = this.status();
+          if (!status.aiEnabled || !status.keyConfigured)
+            throw new AppError(
+              !status.aiEnabled ? "setting_off" : "key_missing",
+              "AI設定とキーを確認してから同じ要求を再送してください。",
+              id,
+            );
+          if (r.day_key !== p.day(p.now())) {
+            repo.update("ai_requests", id, {
+              state: "failed",
+              error_code: "reservation_expired",
+              updated_at: String(p.now()),
+            });
+            throw new AppError(
+              "ai_failed",
+              "前日の未送信予約は失効しました。新しい要求でやり直してください。",
+              id,
+            );
+          }
+          if (status.usage.blocked || status.usage.count > status.dailyLimit)
+            throw new AppError(
+              "limit_reached",
+              "今日のAI利用上限に達しました。",
+              id,
             );
         } else {
+          if (feature === "grade") {
+            const inflight = repo.all("ai_requests").find((other) => {
+              if (
+                other.feature !== "grade" ||
+                !(
+                  ["pending", "running", "unknown"].includes(other.state) ||
+                  (other.state === "succeeded" &&
+                    !repo.find("assessments", "assessment-" + other.id))
+                )
+              )
+                return false;
+              const previous = JSON.parse(other.snapshot_json).input;
+              return previous.attemptId === input.attemptId;
+            });
+            if (inflight)
+              throw new AppError(
+                "ai_pending",
+                "先の採点を確認または中止してから再判定してください。",
+                inflight.id,
+              );
+          }
           const s = this.status();
           if (s.aiReason)
             throw new AppError(
@@ -79,11 +125,18 @@ function createAiApplication_(p) {
               }[s.aiReason],
             );
           const snapshot = {
-            input,
+            input: JSON.parse(JSON.stringify(input)),
             model: p.config().ai.model,
             maxOutputTokens: p.config().ai.maxOutputTokens,
             promptVersion: "english-v1",
           };
+          // 会話の新しい発話は残し、古い文脈から削って送信上限内に収める。
+          while (
+            snapshot.input.history?.length &&
+            utf8Bytes_(JSON.stringify(snapshot)) >
+              p.config().limits.snapshotBytes
+          )
+            snapshot.input.history.shift();
           if (
             utf8Bytes_(JSON.stringify(snapshot)) >
             p.config().limits.snapshotBytes
@@ -153,6 +206,7 @@ function createAiApplication_(p) {
                 ? "ai_unknown"
                 : "ai_failed",
             "AIの結果を確認できませんでした。回答は保持されています。",
+            id,
           );
         }
         // 外部結果の保存が失敗した場合はrunningのまま残す。自動再送しない。

@@ -53,3 +53,12 @@ _まだ判断は記録されていません。`log-decision` が末尾に追記�
 - 撤退条件 (stop/revert): 実Gemini校正・GAS受入を満たさなければ配布せず改修する。
 - 結果 (outcome): open。ローカル検証済み、実環境受入待ち。
 - link: ../tasks/03_active/GAS英語訓練_G3実装.md
+
+
+## 2026-10-25 — G3見直しで復旧と学習集計の確定条件を修正
+- type: approach-choice
+- 根拠 (why): 見直し依頼によりWebアプリの保存先、予約再開、会話復旧、時刻同値時の集計に不具合を確認。
+- 影響範囲 (blast radius): G3実装・テスト・文書。schema列追加なし、公開環境の操作なし。
+- 撤退条件 (stop/revert): 実環境受入でコピー先・文字列保存・採点校正を満たさなければ配布を進めない。
+- 結果 (outcome): open。ローカル回帰検証後も実環境受入は残る。
+- link: ../tasks/03_active/GAS英語訓練_G3見直し修正.md

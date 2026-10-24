@@ -11,6 +11,45 @@ function createTalkApplication_(p) {
       .filter((t) => t.session_id === id)
       .sort((a, b) => Number(a.sequence) - Number(b.sequence));
   }
+  function present(id) {
+    const s = session(id),
+      turns = history(id);
+    const pending = repo
+      .all("talk_requests")
+      .find(
+        (r) =>
+          r.session_id === id &&
+          r.state === "pending" &&
+          !turns.some((t) => t.id === r.id) &&
+          !["failed", "abandoned"].includes(
+            repo.find("ai_requests", "turn-" + r.id)?.state,
+          ),
+      );
+    const closing = repo.find("operations", "closing-" + id);
+    return {
+      sessionId: id,
+      scenario: s.scenario,
+      state: s.state,
+      turns,
+      openingState:
+        repo.find("ai_requests", "opening-" + id)?.state || "unreserved",
+      pendingTurn: pending
+        ? {
+            turn_id: pending.id,
+            message: pending.message,
+            aiRequestId: "turn-" + pending.id,
+          }
+        : null,
+      closingRequestId:
+        s.state === "closing" &&
+        !["failed", "abandoned"].includes(
+          repo.find("ai_requests", closing?.target_id)?.state,
+        )
+          ? closing?.target_id?.replace(/^end-/, "") || null
+          : null,
+      candidates: repo.all("candidates").filter((c) => c.session_id === id),
+    };
+  }
   function consent(value) {
     if (value !== true)
       throw new AppError(
@@ -21,7 +60,7 @@ function createTalkApplication_(p) {
   return {
     start(request) {
       consent(request.consent);
-      const id = requireId_(request.session_id),
+      const id = requireId_(request.session_id, 100),
         scenario = request.scenario;
       if (!["teacher", "learner", "free_talk"].includes(scenario))
         throw new AppError("validation_error", "シナリオを選択してください。");
@@ -42,8 +81,7 @@ function createTalkApplication_(p) {
           });
       });
       const existing = repo.find("talk_turns", "opening-" + id);
-      if (existing)
-        return { sessionId: id, turns: history(id), state: session(id).state };
+      if (existing) return present(id);
       if (session(id).state !== "open")
         throw new AppError("session_closed", "会話は終了しています。");
       const result = p.ai.run("opening-" + id, "talk_opening", { scenario });
@@ -60,14 +98,15 @@ function createTalkApplication_(p) {
           created_at: p.iso(),
         });
       });
-      return { sessionId: id, turns: history(id), state: "open" };
+      return present(id);
     },
     send(request) {
       consent(request.consent);
       const sid = requireId_(
           request.session_id || request.conversation_session_id,
+          100,
         ),
-        id = requireId_(request.turn_id),
+        id = requireId_(request.turn_id, 100),
         message = requireText_(
           request.message,
           "メッセージ",
@@ -83,7 +122,20 @@ function createTalkApplication_(p) {
             "同じターンの入力が変更されています。",
           );
         const done = repo.find("talk_turns", id);
-        if (done) return { done: true };
+        if (done) {
+          if (!old || done.session_id !== sid)
+            throw new AppError(
+              "request_conflict",
+              "別の会話記録で使われているIDです。",
+            );
+          return { done: true };
+        }
+        if (old && old.state !== "pending")
+          throw new AppError(
+            "ai_" + old.state,
+            "このメッセージ要求は終了しています。新しいIDで送信してください。",
+            "turn-" + id,
+          );
         if (s.state !== "open")
           throw new AppError("session_closed", "会話は終了しています。");
         const turns = history(sid);
@@ -105,6 +157,7 @@ function createTalkApplication_(p) {
             throw new AppError(
               "busy",
               "前のメッセージを再送して結果を確認してください。結果不明なら中止後に送信できます。",
+              ai?.id || null,
             );
         }
         if (turns.length > p.config().limits.talkTurns)
@@ -144,8 +197,21 @@ function createTalkApplication_(p) {
             message,
           });
         } catch (e) {
-          if (["setting_off", "key_missing", "limit_reached"].includes(e.code))
-            p.lock(() => repo.update("talk_requests", id, { state: "failed" }));
+          p.lock(() => {
+            const ai = repo.find("ai_requests", "turn-" + id);
+            if (ai && ["failed", "abandoned"].includes(ai.state))
+              repo.update("talk_requests", id, { state: ai.state });
+            else if (
+              !ai &&
+              [
+                "setting_off",
+                "key_missing",
+                "limit_reached",
+                "validation_error",
+              ].includes(e.code)
+            )
+              repo.update("talk_requests", id, { state: "failed" });
+          });
           throw e;
         }
         p.lock(() => {
@@ -163,14 +229,15 @@ function createTalkApplication_(p) {
           repo.update("talk_requests", id, { state: "succeeded" });
         });
       }
-      return { sessionId: sid, state: session(sid).state, turns: history(sid) };
+      return present(sid);
     },
     end(request) {
       consent(request.consent);
       const sid = requireId_(
           request.session_id || request.conversation_session_id,
+          100,
         ),
-        rid = "end-" + requireId_(request.request_id);
+        rid = "end-" + requireId_(request.request_id, 100);
       const prepared = p.lock(() => {
         const s = session(sid);
         if (s.state === "closed") return { closed: true };
@@ -242,15 +309,7 @@ function createTalkApplication_(p) {
             .map((t) => ({ user: t.user_text, assistant: t.reply })),
         };
       });
-      if (prepared.closed)
-        return {
-          sessionId: sid,
-          state: "closed",
-          turns: history(sid),
-          candidates: repo
-            .all("candidates")
-            .filter((c) => c.session_id === sid),
-        };
+      if (prepared.closed) return present(sid);
       const result = p.ai.run(prepared.effectiveId, "talk_end", {
         sessionId: sid,
         scenario: prepared.scenario,
@@ -281,14 +340,11 @@ function createTalkApplication_(p) {
           state: "closed",
           updated_at: p.iso(),
         });
-        return {
-          sessionId: sid,
-          state: "closed",
-          turns: history(sid),
-          candidates: repo
-            .all("candidates")
-            .filter((c) => c.session_id === sid),
-        };
+        repo.update("operations", "closing-" + sid, {
+          state: "succeeded",
+          updated_at: p.iso(),
+        });
+        return present(sid);
       });
     },
     review(request) {
@@ -304,15 +360,7 @@ function createTalkApplication_(p) {
       });
     },
     get(id) {
-      const s = session(id);
-      return {
-        sessionId: s.id,
-        scenario: s.scenario,
-        state: s.state,
-        turns: history(id),
-        openingState:
-          repo.find("ai_requests", "opening-" + id)?.state || "unreserved",
-      };
+      return present(requireId_(id));
     },
   };
 }
