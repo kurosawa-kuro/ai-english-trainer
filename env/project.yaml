@@ -1,0 +1,10 @@
+# Project path/name source of truth.
+#
+# プロジェクトを移動・改名したらこのファイルを直す。
+# （生成元テンプレートにあった `make render-project-config` は、この repo の
+#   Makefile にまだ存在しない。Makefile は starter の TODO のままである。）
+
+projectName: ai-english-trainer
+repoRoot: /Users/kurosawa/Dev/ai-english-trainer
+workspaceRoot: /Users/kurosawa/Dev
+homeDir: /Users/kurosawa

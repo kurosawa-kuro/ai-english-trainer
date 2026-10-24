@@ -1,0 +1,47 @@
+# ===========================================
+# プロジェクト固有設定
+# 環境変数で個別にオーバーライド可能
+# ローカル秘密情報は env/secret.yaml、共有・本番クレデンシャルは Doppler で管理 (doppler.yaml)
+# 識別子の正本は env/project.yaml
+# ===========================================
+
+# --- アプリケーション ---
+projectName: speak-kit
+appEnv: local
+port: 3000
+logLevel: info
+learners: 1
+audioEnabled: false
+aiRequired: false
+
+# --- サーバー ---
+server:
+  timeout: 60
+  corsAllowAll: false
+
+# --- 参照 ---
+githubRepo: https://github.com/kurosawa-kuro/speak-kit
+referenceApp: /Users/kurosawa/Dev/private-ops/apps/skill-trainer
+
+# --- ローカル Postgres ---
+# 28 SQL の適用先。live の DB_FLOW_URL ではない。
+# role と public.flow_schema_migrations はこの DB の中にだけ作る。
+localPostgres:
+  database: speak_kit
+  schema: skill_trainer
+  role: job_control_api
+
+# --- Supabase（東京。2026-10-13 に作り直した。DB の形と教材は当て済み） ---
+supabase:
+  projectRef: uhcfeyzwczepyjnqgwoq
+  url: https://uhcfeyzwczepyjnqgwoq.supabase.co
+  region: ap-northeast-1 # 東京
+  compute: nano
+
+# --- Vercel（project speak-kit。関数は東京 hnd1。GitHub 未接続で、デプロイは make cloud-deploy） ---
+vercel:
+  account: kurosawa8122-9989
+  team: toshifumi-kurosawas-projects
+  project: speak-kit
+  url: https://speak-kit.vercel.app
+  existingProjectNotUsed: vercel-nextjs-starter
