@@ -1,0 +1,192 @@
+<!-- admin-pico の CSS（admin-theme.css）。ここが正本で、直接直してよい（2026-10-24 にテンプレート本体を削除したため）。
+     出どころ：pico-admin-template（作者表記 Pasquale Vitiello / https://cruip.com、利用条件 https://cruip.com/terms/）。
+
+     色の値を書いてよいのはこのファイルだけ（tests/architecture.test.mjs が検査する）。他のファイルは --admin-* を使う。
+     配色：2026-10-24 に業務用のダーク（ライム）から、明るくガーリーでポップな配色に替えた（docs/リファクタリング方針-UI.md）。
+     変数の名前は色ではなく役割で付ける（accent = 操作・選択、danger = 危険・必須）。 -->
+<style>
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* 地・面 */
+  --admin-page-bg:
+    radial-gradient(circle at 100% 0%, rgba(255, 182, 213, 0.5), transparent 22rem),
+    radial-gradient(circle at 0% 35%, rgba(196, 181, 253, 0.38), transparent 24rem),
+    radial-gradient(circle at 85% 100%, rgba(255, 214, 165, 0.35), transparent 26rem),
+    #fff7fa;
+  --admin-bg-main: #fff7fa;
+  --admin-bg-sub: #ffffff;
+  --admin-bg-elevated: #ffffff;
+  --admin-bg-header: #fff3f8;
+  --admin-bg-hover: #fff0f6;
+  --admin-bg-active: #ffe4ee;
+  --admin-bg-glass: rgba(255, 255, 255, 0.88);
+  --admin-card-bg: #ffffff;
+  --admin-hero-bg:
+    radial-gradient(circle at top right, rgba(232, 64, 122, 0.12), transparent 35%),
+    linear-gradient(180deg, #ffffff, #fff5f9);
+  --admin-surface-tint: rgba(201, 42, 107, 0.04);
+  --admin-surface-tint-strong: rgba(201, 42, 107, 0.08);
+
+  /* 線 */
+  --admin-border: #f4e1eb;
+  --admin-border-strong: #e8c9da;
+
+  /* 文字 */
+  --admin-text-main: #2b2233;
+  --admin-text-sub: #6e6276;
+  --admin-text-muted: #75697c;
+
+  /* 操作・選択（主役）。文字に使うときは accent-strong（白地で 4.5:1 以上） */
+  --admin-accent: #e8407a;
+  --admin-accent-strong: #c02565;
+  --admin-accent-soft: #ffe6ef;
+  --admin-accent-glow: rgba(232, 64, 122, 0.22);
+  --admin-accent-border: rgba(232, 64, 122, 0.38);
+  --admin-accent-gradient: linear-gradient(135deg, #d63371 0%, #b83aae 55%, #7c4deb 100%);
+  --admin-accent-gradient-hover: linear-gradient(135deg, #c92a6b 0%, #a8309f 55%, #6d3fdb 100%);
+  --admin-on-accent: #ffffff;
+
+  /* 危険・必須・エラー（主役のピンクと見分けるため赤） */
+  --admin-danger: #cc2633;
+  --admin-danger-soft: #fdecee;
+  --admin-danger-border: rgba(204, 38, 51, 0.38);
+
+  /* 成功 */
+  --admin-success: #137a63;
+  --admin-success-border: rgba(60, 207, 180, 0.75);
+
+  /* キーワードの彩り（パステルの地と濃い文字の組。キーワードごとに順に使う） */
+  --admin-pop-1-bg: #ffe3ee;
+  --admin-pop-1-fg: #b4235f;
+  --admin-pop-2-bg: #eee7ff;
+  --admin-pop-2-fg: #5b34c4;
+  --admin-pop-3-bg: #dcf5ee;
+  --admin-pop-3-fg: #11705a;
+  --admin-pop-4-bg: #ffefd6;
+  --admin-pop-4-fg: #8a5100;
+
+  /* 写真の枠・重ね */
+  --admin-thumb-bg: linear-gradient(135deg, #fbd3e3, #e4d7ff);
+  --admin-thumb-shade: linear-gradient(180deg, transparent, rgba(43, 34, 51, 0.28));
+  --admin-overlay: rgba(43, 34, 51, 0.45);
+  --admin-on-overlay: #ffffff;
+  --admin-track: #f6e6ee;
+  --admin-ring: rgba(255, 255, 255, 0.95);
+
+  /* 影・角丸 */
+  --admin-shadow: 0 12px 32px rgba(201, 42, 107, 0.1);
+  --admin-shadow-soft: 0 4px 14px rgba(43, 34, 51, 0.06);
+  --admin-radius: 18px;
+
+  /* Pico（1 系と 2 系の両方の変数名に当てる。2 系はボタン・下線に別の名前を使うため） */
+  --pico-background-color: var(--admin-bg-main);
+  --pico-color: var(--admin-text-main);
+  --pico-muted-color: var(--admin-text-sub);
+  --pico-muted-border-color: var(--admin-border);
+  --pico-primary: var(--admin-accent-strong);
+  --pico-primary-hover: var(--admin-accent-strong);
+  --pico-primary-background: #d63371;
+  --pico-primary-border: #d63371;
+  --pico-primary-hover-background: #c92a6b;
+  --pico-primary-hover-border: #c92a6b;
+  --pico-primary-underline: rgba(201, 42, 107, 0.4);
+  --pico-primary-hover-underline: var(--admin-accent-strong);
+  --pico-primary-focus: var(--admin-accent-glow);
+  --pico-primary-inverse: var(--admin-on-accent);
+  --pico-secondary: var(--admin-text-sub);
+  --pico-secondary-background: #ffffff;
+  --pico-secondary-border: var(--admin-border-strong);
+  --pico-secondary-hover: var(--admin-text-main);
+  --pico-secondary-hover-background: var(--admin-bg-hover);
+  --pico-secondary-hover-border: var(--admin-accent-border);
+  --pico-secondary-inverse: var(--admin-text-main);
+  --pico-secondary-focus: rgba(201, 42, 107, 0.15);
+  --pico-form-element-background-color: #ffffff;
+  --pico-form-element-selected-background-color: var(--admin-accent-soft);
+  --pico-form-element-border-color: var(--admin-border-strong);
+  --pico-form-element-active-border-color: var(--admin-accent);
+  --pico-form-element-focus-color: var(--admin-accent-glow);
+  --pico-form-element-color: var(--admin-text-main);
+  --pico-form-element-placeholder-color: var(--admin-text-muted);
+  --pico-card-background-color: var(--admin-card-bg);
+  --pico-card-border-color: var(--admin-border);
+  --pico-card-sectioning-background-color: var(--admin-bg-header);
+  --pico-dropdown-background-color: var(--admin-bg-elevated);
+  --pico-dropdown-border-color: var(--admin-border);
+  --pico-box-shadow: none;
+  --pico-border-radius: 14px;
+  --pico-spacing: 1rem;
+  --pico-font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Yu Gothic", Meiryo, system-ui, sans-serif;
+  --pico-line-height: 1.7;
+}
+
+html {
+  color-scheme: light;
+  background: var(--admin-page-bg);
+  background-attachment: fixed;
+}
+
+body {
+  min-height: 100vh;
+  background: transparent;
+  color: var(--admin-text-main);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--admin-text-main);
+  letter-spacing: -0.02em;
+}
+
+p,
+label,
+small,
+summary,
+li {
+  color: var(--admin-text-sub);
+}
+
+a {
+  color: var(--admin-text-main);
+}
+
+a:hover,
+a:focus {
+  color: var(--admin-accent-strong);
+}
+
+button,
+[role="button"],
+input,
+select,
+textarea {
+  box-shadow: none;
+}
+
+input[type="search"]::-webkit-search-cancel-button {
+  display: none;
+}
+
+hr {
+  border-color: var(--admin-border);
+}
+
+table {
+  margin: 0;
+}
+
+thead th {
+  color: var(--admin-text-sub);
+}
+
+tbody tr:hover {
+  background: var(--admin-surface-tint);
+}
+
+</style>

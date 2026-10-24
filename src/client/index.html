@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <base target="_top" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI英語訓練</title>
+    <?!= include_("client/vendor/admin-pico/admin-theme") ?>
+    <?!= include_("client/style") ?>
+  </head>
+  <body>
+    <header>
+      <div>
+        <span class="eyebrow">DAILY ENGLISH PRACTICE</span>
+        <h1>AI英語訓練</h1>
+        <p>思い出す。書いてみる。会話で使う。</p>
+      </div>
+      <span id="connection" role="status">準備中</span>
+    </header>
+    <nav aria-label="メイン">
+      <button data-tab="today">今日</button
+      ><button data-tab="train">練習</button
+      ><button data-tab="talk">会話</button
+      ><button data-tab="records">記録</button
+      ><button data-tab="settings">設定</button>
+    </nav>
+    <main>
+      <p id="error" role="alert" hidden></p>
+      <p id="notice" role="status" hidden></p>
+      <section id="today">
+        <h2>今日の一歩</h2>
+        <p>短い練習を、毎日の習慣に。</p>
+        <div id="stats" class="stats"></div>
+        <div class="cards">
+          <article>
+            <h3>選んで思い出す</h3>
+            <p>意味や意図を確かめるクイズ。</p>
+            <button data-jump="train">練習を始める</button>
+          </article>
+          <article>
+            <h3>英語で話題を広げる</h3>
+            <p>先生・学習者・自由会話の3つから選択。</p>
+            <button data-jump="talk">会話を始める</button>
+          </article>
+        </div>
+      </section>
+      <section id="train" hidden>
+        <h2>練習</h2>
+        <label
+          >練習方法<select id="mode">
+            <option value="choice">意味・意図を選ぶ</option>
+            <option value="controlled_recall">思い出して答える</option>
+            <option value="slot_replacement">一部を入れ替える</option>
+            <option value="contrast_drill">表現を使い分ける</option>
+            <option value="recognition">英文の意味を書く</option>
+            <option value="free_production">自由に英文を作る</option>
+          </select></label
+        ><button id="next">次の問題</button>
+        <p id="content-warnings"></p>
+        <article id="exercise" hidden>
+          <p class="eyebrow" id="exercise-label"></p>
+          <h3 id="prompt"></h3>
+          <p id="pattern"></p>
+          <div id="options"></div>
+          <label id="answer-label"
+            >回答<textarea id="answer" rows="4" maxlength="2000"></textarea>
+          </label>
+          <p class="privacy">
+            名前・連絡先などの個人情報や機密情報を書かないでください。
+          </p>
+          <label
+            ><input type="checkbox" id="grade-consent" />
+            AIへ送信する内容を確認しました</label
+          >
+          <div class="actions">
+            <button id="submit">回答する</button
+            ><button id="regrade" hidden>新しい要求で再判定</button>
+          </div>
+          <div id="feedback" aria-live="polite"></div>
+        </article>
+      </section>
+      <section id="talk" hidden>
+        <h2>AIと会話</h2>
+        <label
+          >シナリオ<select id="scenario">
+            <option value="teacher">先生と練習</option>
+            <option value="learner">仲間と練習</option>
+            <option value="free_talk">自由会話</option>
+          </select></label
+        >
+        <p class="privacy">
+          個人情報を含めず、架空の場面で練習してください。会話はGeminiへ送信されます。
+        </p>
+        <label
+          ><input type="checkbox" id="talk-consent" />
+          送信内容を確認しました</label
+        >
+        <div class="actions">
+          <button id="start-talk">会話を開始</button
+          ><button id="end-talk" disabled>終了して振り返る</button
+          ><button id="new-talk" hidden>別の会話</button>
+        </div>
+        <div id="transcript" aria-live="polite"></div>
+        <label
+          >英語のメッセージ<textarea
+            id="message"
+            rows="3"
+            maxlength="2000"
+          ></textarea></label
+        ><button id="send-talk" disabled>送信</button>
+      </section>
+      <section id="records" hidden>
+        <h2>学習記録</h2>
+        <button id="refresh-records">更新</button
+        ><button id="reset-review">覚えたものを再チェック</button>
+        <div id="records-list"></div>
+        <h3>会話履歴</h3>
+        <div id="sessions"></div>
+        <h3>会話から見つかった表現</h3>
+        <p>
+          承認は候補の記録です。教材に加える場合はexpressionsシートへ例文・選択肢とともに登録してください。
+        </p>
+        <div id="candidates"></div>
+      </section>
+      <section id="settings" hidden>
+        <h2>設定</h2>
+        <p id="ai-status"></p>
+        <label><input id="ai-enabled" type="checkbox" /> AIを使う</label
+        ><label
+          >1日の呼出上限<input
+            id="daily-limit"
+            type="number"
+            min="1"
+            max="1000"
+            value="30" /></label
+        ><label
+          >Gemini APIキー（空欄なら現在のキーを維持）<input
+            id="api-key"
+            type="password"
+            autocomplete="new-password"
+        /></label>
+        <div class="actions">
+          <button id="save-settings">保存</button
+          ><button id="delete-key">キーを削除</button>
+        </div>
+        <p>
+          各自のGoogle AI
+          Studioでキーを発行してください。無料枠を利用する場合は課金を有効にしないでください。課金状態はこのアプリでは判定できません。
+        </p>
+        <p>
+          無料枠では入出力が製品改善に利用される場合があります。キーはサーバーのScript
+          Propertiesに保存されます。
+        </p>
+        <details>
+          <summary>結果不明のAI要求</summary>
+          <p>
+            通信結果が不明な要求は自動再実行しません。15分以上経過した要求を中止してから、新しい要求で再判定できます。
+          </p>
+          <label>AI要求ID<input id="abandon-id" /></label
+          ><button id="abandon">要求を中止</button>
+        </details>
+      </section>
+    </main>
+    <footer>1人1コピーの学習アプリ · テキストで練習</footer>
+    <?!= include_("client/core/api") ?>
+    <?!= include_("client/app") ?>
+  </body>
+</html>

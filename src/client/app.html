@@ -1,0 +1,550 @@
+<script>
+  (() => {
+    const $ = (id) => document.getElementById(id),
+      api = (name, r) => TrainerApi.call("skill_trainer_" + name, r);
+    const state = {
+      tab: "today",
+      seq: 0,
+      item: null,
+      attempt: null,
+      regrade: null,
+      session: null,
+      start: null,
+      turn: null,
+      end: null,
+      busy: false,
+    };
+    try {
+      Object.assign(
+        state,
+        JSON.parse(sessionStorage.getItem("trainer-pending") || "{}"),
+      );
+    } catch {}
+    function persist() {
+      try {
+        sessionStorage.setItem(
+          "trainer-pending",
+          JSON.stringify({
+            item: state.item,
+            attempt: state.attempt,
+            regrade: state.regrade,
+            session: state.session,
+            start: state.start,
+            turn: state.turn,
+            end: state.end,
+          }),
+        );
+      } catch {}
+    }
+    function node(tag, text, cls) {
+      const n = document.createElement(tag);
+      if (text != null) n.textContent = text;
+      if (cls) n.className = cls;
+      return n;
+    }
+    function error(e) {
+      $("error").hidden = false;
+      $("error").textContent = e.message;
+      const talkId = state.end
+        ? "end-" + state.end.request_id
+        : state.turn
+          ? "turn-" + state.turn.turn_id
+          : state.start
+            ? "opening-" + state.start.session_id
+            : "";
+      const gradeId = state.regrade
+        ? "regrade-" + state.regrade.regrade_id
+        : state.attempt
+          ? "grade-" + state.attempt.attempt_id
+          : "";
+      const id = state.tab === "talk" ? talkId : gradeId;
+      if (id && ["ai_unknown", "ai_running", "ai_pending"].includes(e.code)) {
+        $("error").textContent += "\n要求ID：" + id;
+        $("abandon-id").value = id;
+      }
+    }
+    async function action(button, fn) {
+      if (state.busy) return;
+      state.busy = true;
+      button.disabled = true;
+      $("error").hidden = true;
+      try {
+        await fn();
+      } catch (e) {
+        error(e);
+      } finally {
+        state.busy = false;
+        button.disabled = false;
+        sync();
+        persist();
+      }
+    }
+    function sync() {
+      $("next").disabled = state.busy || Boolean(state.attempt);
+      $("mode").disabled = state.busy || Boolean(state.attempt);
+      $("submit").disabled = state.busy || !state.item;
+      $("answer").readOnly = Boolean(state.attempt);
+      document
+        .querySelectorAll('input[name="option"]')
+        .forEach((n) => (n.disabled = Boolean(state.attempt)));
+      $("send-talk").disabled =
+        state.busy || !state.session || state.session.state !== "open";
+      $("end-talk").disabled =
+        state.busy || !state.session || state.session.state === "closed";
+      $("start-talk").disabled =
+        state.busy || Boolean(state.session && !state.start);
+      $("new-talk").hidden = !state.session || state.session.state !== "closed";
+      $("message").readOnly = Boolean(state.turn);
+    }
+    async function switchTab(tab, history = true) {
+      state.tab = tab;
+      const seq = ++state.seq;
+      ["today", "train", "talk", "records", "settings"].forEach(
+        (id) => ($(id).hidden = id !== tab),
+      );
+      document.querySelectorAll("[data-tab]").forEach((n) => {
+        if (n.dataset.tab === tab) n.setAttribute("aria-current", "page");
+        else n.removeAttribute("aria-current");
+      });
+      if (history && google.script.history)
+        google.script.history.replace({ tab }, null, tab);
+      $("error").hidden = true;
+      try {
+        if (tab === "today" || tab === "records") {
+          const result = await api("get_progress_v2");
+          if (seq !== state.seq) return;
+          renderRecords(result);
+          $("stats").replaceChildren(
+            ...[
+              ["回答", result.total],
+              ["判定済み", result.graded],
+            ].map(([label, n]) => {
+              const d = node("div", label);
+              d.append(node("strong", String(n)));
+              return d;
+            }),
+          );
+        }
+        if (tab === "settings") {
+          const result = await api("get_settings_v1");
+          if (seq !== state.seq) return;
+          showSettings(result);
+        }
+        if (tab === "train" && state.item) renderExercise();
+        if (tab === "talk" && state.session) {
+          const result = await TrainerApi.call("english_trainer_get_talk_v1", {
+            session_id: state.session.sessionId,
+          });
+          if (seq !== state.seq) return;
+          renderTalk(result);
+        }
+        $("connection").textContent = "学習の準備ができました";
+      } catch (e) {
+        if (seq === state.seq) {
+          error(e);
+          $("connection").textContent = "設定・接続を確認";
+        }
+      }
+      sync();
+    }
+    function renderExercise() {
+      const item = state.item;
+      $("exercise").hidden = !item;
+      if (!item) return;
+      $("prompt").textContent = item.prompt;
+      $("pattern").textContent = item.form || "";
+      $("exercise-label").textContent =
+        $("mode").selectedOptions[0].textContent;
+      $("options").replaceChildren();
+      $("answer-label").hidden = Boolean(item.options);
+      for (const option of item.options || []) {
+        const l = node("label"),
+          r = node("input");
+        r.type = "radio";
+        r.name = "option";
+        r.value = option.id;
+        r.checked = state.attempt?.selected_option_id === option.id;
+        l.append(r, document.createTextNode(" " + option.text));
+        $("options").append(l);
+      }
+      $("answer").value = state.attempt?.answer_text || "";
+      sync();
+    }
+    function showResult(result) {
+      $("feedback").textContent =
+        result.feedback +
+        "\n回答例：" +
+        result.expected +
+        (result.observation ? "\n" + result.observation.reason : "");
+      $("regrade").hidden = true;
+      state.attempt = null;
+      state.regrade = null;
+      state.item = null;
+      $("submit").disabled = true;
+      persist();
+      sync();
+    }
+    $("next").onclick = () =>
+      action($("next"), async () => {
+        const mode = $("mode").value,
+          seq = state.seq;
+        const result = await api(
+          mode === "choice" ? "quiz_next_v1" : "get_practice_v2",
+          { mode },
+        );
+        if (seq !== state.seq) return;
+        state.item = result.item;
+        state.attempt = null;
+        state.regrade = null;
+        $("feedback").textContent = "";
+        $("regrade").hidden = true;
+        $("content-warnings").textContent = (result.warnings || []).join("\n");
+        renderExercise();
+        if (!result.item) {
+          $("notice").hidden = false;
+          $("notice").textContent =
+            result.message || "この練習方法の教材がありません。";
+        } else $("notice").hidden = true;
+      });
+    $("submit").onclick = () =>
+      action($("submit"), async () => {
+        const choice = Boolean(state.item.options);
+        if (!state.attempt)
+          state.attempt = {
+            attempt_id: TrainerApi.id(),
+            item_id: state.item.id,
+            response_mode: choice ? "choice" : "free_text",
+            ...(choice
+              ? {
+                  selected_option_id:
+                    document.querySelector('input[name="option"]:checked')
+                      ?.value || "",
+                }
+              : { answer_text: $("answer").value }),
+            consent: $("grade-consent").checked,
+          };
+        // 同意は保存前検証で止まった場合に付け直せる。回答本文は固定する。
+        state.attempt.consent = $("grade-consent").checked;
+        persist();
+        sync();
+        try {
+          const result = await api("submit_attempt_v2", state.attempt);
+          showResult(result);
+        } catch (e) {
+          if (e.code === "validation_error") {
+            state.attempt = null;
+          } else if (!choice) $("regrade").hidden = false;
+          throw e;
+        }
+      });
+    $("regrade").onclick = () =>
+      action($("regrade"), async () => {
+        if (!state.attempt) return;
+        state.regrade ??= {
+          attempt_id: state.attempt.attempt_id,
+          regrade_id: TrainerApi.id(),
+        };
+        persist();
+        try {
+          const result = await api("regrade_attempt_v2", {
+            ...state.regrade,
+            consent: $("grade-consent").checked,
+          });
+          showResult(result);
+        } catch (e) {
+          if (e.code === "ai_failed") state.regrade = null;
+          throw e;
+        }
+      });
+    function renderTalk(result) {
+      if (!result.turns?.length && result.state === "open") {
+        if (["failed", "abandoned"].includes(result.openingState)) {
+          state.session = null;
+          state.start = null;
+          $("transcript").replaceChildren(
+            node("p", "開始できませんでした。新しい会話を開始してください。"),
+          );
+          sync();
+          persist();
+          return;
+        }
+        state.start = {
+          session_id: result.sessionId,
+          scenario: result.scenario || state.start?.scenario || "teacher",
+        };
+      }
+      state.session = { sessionId: result.sessionId, state: result.state };
+      $("transcript").replaceChildren();
+      for (const t of result.turns || []) {
+        if (t.user_text)
+          $("transcript").append(node("div", t.user_text, "bubble user"));
+        $("transcript").append(node("div", t.reply, "bubble"));
+        if (t.feedback) $("transcript").append(node("p", t.feedback));
+      }
+      sync();
+      persist();
+    }
+    $("start-talk").onclick = () =>
+      action($("start-talk"), async () => {
+        state.start ??= {
+          session_id: TrainerApi.id(),
+          scenario: $("scenario").value,
+        };
+        persist();
+        try {
+          const result = await api("start_talk_session_v2", {
+            ...state.start,
+            consent: $("talk-consent").checked,
+          });
+          renderTalk(result);
+          state.start = null;
+        } catch (e) {
+          if (e.code === "ai_failed") state.start = null;
+          throw e;
+        }
+      });
+    $("send-talk").onclick = () =>
+      action($("send-talk"), async () => {
+        state.turn ??= {
+          session_id: state.session.sessionId,
+          turn_id: TrainerApi.id(),
+          message: $("message").value,
+        };
+        persist();
+        sync();
+        try {
+          const result = await api("send_talk_message_v2", {
+            ...state.turn,
+            consent: $("talk-consent").checked,
+          });
+          state.turn = null;
+          $("message").value = "";
+          renderTalk(result);
+        } catch (e) {
+          if (
+            [
+              "validation_error",
+              "ai_failed",
+              "limit_reached",
+              "setting_off",
+              "key_missing",
+            ].includes(e.code)
+          )
+            state.turn = null;
+          throw e;
+        }
+      });
+    $("end-talk").onclick = () =>
+      action($("end-talk"), async () => {
+        state.end ??= {
+          session_id: state.session.sessionId,
+          request_id: TrainerApi.id(),
+        };
+        persist();
+        try {
+          const result = await api("end_talk_session_v2", {
+            ...state.end,
+            consent: $("talk-consent").checked,
+          });
+          state.turn = null;
+          state.end = null;
+          renderTalk(result);
+        } catch (e) {
+          if (
+            [
+              "ai_failed",
+              "limit_reached",
+              "setting_off",
+              "key_missing",
+            ].includes(e.code)
+          )
+            state.end = null;
+          throw e;
+        }
+      });
+    $("new-talk").onclick = () => {
+      state.session = null;
+      state.start = null;
+      state.turn = null;
+      state.end = null;
+      $("transcript").replaceChildren();
+      persist();
+      sync();
+    };
+    function renderRecords(result) {
+      $("records-list").replaceChildren();
+      for (const r of result.records) {
+        const a = node("article", null, "record");
+        a.append(
+          node("small", new Date(r.created_at).toLocaleString("ja-JP")),
+          node("p", r.answerLabel || r.answer),
+          node(
+            "p",
+            r.result
+              ? r.result.feedback
+              : "未判定：AI設定を確認して再判定できます。",
+          ),
+        );
+        if (r.response_mode === "free_text") {
+          const b = node("button", "この回答を再判定");
+          let pending = null;
+          b.onclick = () =>
+            action(b, async () => {
+              if (
+                !$("grade-consent").checked &&
+                !confirm(
+                  "個人情報を含まない回答をGeminiへ再送します。よろしいですか？",
+                )
+              )
+                return;
+              pending =
+                state.regrade?.attempt_id === r.id
+                  ? state.regrade.regrade_id
+                  : TrainerApi.id();
+              state.regrade = { attempt_id: r.id, regrade_id: pending };
+              persist();
+              try {
+                const out = await api("regrade_attempt_v2", {
+                  ...state.regrade,
+                  consent: true,
+                });
+                a.append(node("p", out.feedback));
+                pending = null;
+                state.regrade = null;
+              } catch (e) {
+                if (e.code === "ai_failed") {
+                  pending = null;
+                  state.regrade = null;
+                }
+                throw e;
+              }
+            });
+          a.append(b);
+        }
+        $("records-list").append(a);
+      }
+      $("sessions").replaceChildren();
+      for (const s of result.sessions) {
+        const b = node("button", s.scenario + " · " + s.state);
+        b.onclick = () => {
+          state.session = { sessionId: s.id, state: s.state };
+          state.start = null;
+          state.turn = null;
+          state.end = null;
+          persist();
+          switchTab("talk");
+        };
+        $("sessions").append(b);
+      }
+      $("candidates").replaceChildren();
+      for (const c of result.candidates) {
+        const row = node("article");
+        row.append(
+          node("strong", c.pattern),
+          node("p", c.meaning + " / " + c.state),
+        );
+        for (const [label, decision] of [
+          ["承認", "approved"],
+          ["見送る", "rejected"],
+        ]) {
+          const b = node("button", label);
+          b.onclick = () =>
+            action(b, async () => {
+              await api("review_candidate_v2", {
+                candidate_id: c.id,
+                decision,
+              });
+              await switchTab("records");
+            });
+          row.append(b);
+        }
+        $("candidates").append(row);
+      }
+    }
+    function showSettings(s) {
+      $("ai-enabled").checked = s.aiEnabled;
+      $("daily-limit").value = s.dailyLimit;
+      $("ai-status").textContent =
+        "キー：" +
+        (s.keyConfigured ? "登録済み" : "未登録") +
+        " / 今日 " +
+        s.usage.count +
+        " 回 / " +
+        s.model +
+        (s.aiReason
+          ? " / " +
+            {
+              setting_off: "AIオフ",
+              key_missing: "キー未設定",
+              limit_reached: "上限到達",
+            }[s.aiReason]
+          : "");
+    }
+    async function saveSettings(remove = false) {
+      const request = {
+        ai_enabled: $("ai-enabled").checked,
+        daily_limit: Number($("daily-limit").value),
+      };
+      if (remove) request.api_key = "";
+      else if ($("api-key").value) request.api_key = $("api-key").value;
+      const result = await api("save_settings_v1", request);
+      $("api-key").value = "";
+      showSettings(result);
+      $("notice").hidden = false;
+      $("notice").textContent = "設定を保存しました。";
+    }
+    $("save-settings").onclick = () =>
+      action($("save-settings"), () => saveSettings());
+    $("delete-key").onclick = () =>
+      action($("delete-key"), () => saveSettings(true));
+    $("abandon").onclick = () =>
+      action($("abandon"), async () => {
+        await TrainerApi.call("english_trainer_abandon_ai_v1", {
+          ai_request_id: $("abandon-id").value,
+        });
+        state.turn = null;
+        state.regrade = null;
+        state.end = null;
+        if ($("abandon-id").value === "opening-" + state.start?.session_id) {
+          state.start = null;
+          state.session = null;
+        }
+        $("message").readOnly = false;
+        $("notice").hidden = false;
+        $("notice").textContent =
+          "要求を中止しました。新しい要求でやり直せます。";
+      });
+    $("refresh-records").onclick = () => switchTab("records");
+    let resetId = null;
+    $("reset-review").onclick = () =>
+      action($("reset-review"), async () => {
+        if (!confirm("記録を残したまま再チェックを始めますか？")) return;
+        resetId ??= TrainerApi.id();
+        await api("reset_review_v2", { request_id: resetId });
+        resetId = null;
+        $("notice").hidden = false;
+        $("notice").textContent = "再チェックを開始しました。";
+      });
+    document
+      .querySelectorAll("[data-tab]")
+      .forEach((b) => (b.onclick = () => switchTab(b.dataset.tab)));
+    document
+      .querySelectorAll("[data-jump]")
+      .forEach((b) => (b.onclick = () => switchTab(b.dataset.jump)));
+    if (google.script.history)
+      google.script.history.setChangeHandler((e) =>
+        switchTab(e.state?.tab || "today", false),
+      );
+    if (google.script.url)
+      google.script.url.getLocation((loc) =>
+        switchTab(
+          ["today", "train", "talk", "records", "settings"].includes(loc.hash)
+            ? loc.hash
+            : "today",
+          false,
+        ),
+      );
+    else switchTab("today", false);
+    sync();
+  })();
+</script>

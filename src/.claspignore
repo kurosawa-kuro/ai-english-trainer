@@ -1,0 +1,6 @@
+**/**
+!appsscript.json
+!server/
+!server/**/*.js
+!client/
+!client/**/*.html

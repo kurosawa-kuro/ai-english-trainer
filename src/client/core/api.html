@@ -1,0 +1,33 @@
+<script>
+  const TrainerApi = {
+    call(name, request = {}) {
+      return new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler((result) => {
+            if (result && result.ok) resolve(result.data);
+            else
+              reject(
+                Object.assign(
+                  new Error(
+                    result?.error?.message || "処理を完了できませんでした。",
+                  ),
+                  { code: result?.code },
+                ),
+              );
+          })
+          .withFailureHandler(() =>
+            reject(
+              Object.assign(
+                new Error("通信が切れました。同じ入力のまま再送してください。"),
+                { code: "network" },
+              ),
+            ),
+          )
+          .rpc(name, request);
+      });
+    },
+    id() {
+      return crypto.randomUUID();
+    },
+  };
+</script>

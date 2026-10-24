@@ -44,3 +44,12 @@ _まだ判断は記録されていません。`log-decision` が末尾に追記�
 - 撤退条件 (stop/revert): owner が有料版（課金あり）も併用すると決めたら、金額計算と円表示を 4.4 に戻す
 - 結果 (outcome): open
 - link: docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md 4.4・14
+
+
+## 2026-10-25 — G3まで実装し、実環境受入を分離
+- type: approach-choice
+- 根拠 (why): ユーザーが実装を依頼し、到達範囲にAI会話を含むG3を指定。提示済みのモデルAで構築する。
+- 影響範囲 (blast radius): src、env、関連文書。既存日記・sample・外部サービスは変更しない。
+- 撤退条件 (stop/revert): 実Gemini校正・GAS受入を満たさなければ配布せず改修する。
+- 結果 (outcome): open。ローカル検証済み、実環境受入待ち。
+- link: ../tasks/03_active/GAS英語訓練_G3実装.md

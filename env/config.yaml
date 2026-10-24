@@ -1,47 +1,15 @@
-# ===========================================
-# プロジェクト固有設定（非機密）
-#
-# ここは「黒澤の手元で開発するための設定」である。
-# GAS は実行時にリポジトリのファイルを読めないので、
-# このファイルの値がアプリの挙動を変えることはない。
-#
-# アプリの実行時の値の置き場（構想 02_architecture / 05_data_model）:
-#   - 定数（AI のモデル・上限・為替・タイムゾーン等） -> src/ のコード内 1 か所
-#   - 秘密（Gemini の API キー）                      -> GAS の PropertiesService
-#   - 学習データ・教材・設定                          -> Google Sheets
-#
-# ローカル秘密情報は env/secret.yaml、共有・本番クレデンシャルは Doppler (doppler.yaml)。
-# ===========================================
-
-# --- プロジェクト ---
+﻿# ビルド時に検証し、GAS用の非機密定数へ変換する。
 projectName: ai-english-trainer
-language: ja          # 画面の文言・ドキュメント・コメントはすべて日本語（構想 4.10）
-timeZone: Asia/Tokyo  # 当日境界と利用回数の集計に使う暦（構想 4.4 / 4.6）
-
-# --- 実行基盤 ---
-# Google Apps Script（ウェブアプリ）+ Google Sheets。
-# サーバーもポートも DB も無いため、port / server / cors の設定は存在しない。
-platform: google-apps-script
-
-# --- 関係データベースは採用禁止（構想 5.2） ---
-# Postgres / Supabase / Neon / Turso / Cloud SQL / MySQL を使わない。
-# 接続文字列を置く項目をここにも env/secret.yaml にも作らない。
-# アプリ側の経路は 2 本だけなので、そこを検査で塞ぐ（docs/07_test_strategy.md T1 / T2）:
-#   - Jdbc サービスを使わない
-#   - UrlFetchApp の宛先は generativelanguage.googleapis.com のみ
-database: none
-
-# --- GAS の識別子（着手時に埋める。未着手のため空） ---
-gas:
-  scriptId: ""            # コピー元スクリプトの ID
-  templateSheetId: ""     # 配布するコピー元スプレッドシートの ID
-  testSheetId: ""         # テスト専用スプレッドシートの ID。
-                          # ここが空、または本物のシートを指している間は、
-                          # 書き込むテストを走らせない（docs/07_test_strategy.md）
-
-# --- 未決（構想 8.3。決まるまで A を前提にする） ---
-# 配布モデルが決まると appsscript.json の公開範囲・学習者の識別・鍵の置き場が決まる。
-#   A: access=MYSELF  / executeAs=USER_DEPLOYING / 鍵は各自の ScriptProperties
-#   B: access=ANYONE  / executeAs=USER_ACCESSING / 鍵は各自の UserProperties
-#   C: access=ANYONE  / executeAs=USER_ACCESSING / 鍵は黒澤の ScriptProperties
-distributionModel: undecided
+language: ja
+timeZone: Asia/Tokyo
+distributionModel: A
+ai:
+  model: gemini-3.5-flash-lite
+  maxOutputTokens: 4096
+  dailyLimit: 30
+  runningTimeoutMinutes: 15
+limits:
+  answer: 2000
+  snapshotBytes: 24000
+  talkTurns: 30
+  historyTurns: 10

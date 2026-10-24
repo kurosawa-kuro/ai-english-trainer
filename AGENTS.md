@@ -10,7 +10,7 @@ Codex は作業前にこのファイルを読むため、ここには repo 共�
 - 主要技術: Google Apps Script ＋ Google Sheets ＋ `HtmlService` ＋ Gemini API（Google AI Studio の無料枠）
 - 配布: スプレッドシートの「コピーを作成」。相手に求めるのは Google アカウントと Gemini の鍵（AI Studio で発行。カード不要）だけ
 - **正本**: [`docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md`](docs/GAS版AI英会話訓練アプリ構想_ai-english-trainer.md)。製品定義・禁止事項・未決はすべてそこ。このファイルに重複させない
-- **状態: アイディア（未着手）。`src/` は空**
+- **状態: G3ローカル実装済み。実環境受入・公開は未実施。現行仕様は `docs/specs/gas-trainer-v1.md`**
 
 ## 絶対に破らない制約
 
@@ -18,23 +18,23 @@ Codex は作業前にこのファイルを読むため、ここには repo 共�
    - **`Jdbc` サービスを使わない**
    - **`UrlFetchApp` の宛先は `generativelanguage.googleapis.com` のみ**
 2. **`sample/speak-kit/` は読む専用**（構想 3）。書き込まない。`src/` へ丸ごとコピーせず、読んで GAS 版として書き直す
-3. **このリポジトリの外を見ない**（構想 3）。他リポジトリのパスを書かず、向こうの計画・残作業・未決を引き継がない
+3. ユーザーが指定したAI日記アプリの基盤参照・コピーは今回の明示的例外。それ以外は **このリポジトリの外を見ない**（構想 3）。他リポジトリのパスを書かず、向こうの計画・残作業・未決を引き継がない
 4. **売り物は AI**（構想 2.2）。AI 無しの状態を完成形として扱わない
 5. **音声入出力を作らない**（構想 9）
-6. **配布モデル A / B / C は未決**（構想 8.3）。依存する設計を勝手に決めない
+6. **現行実装は配布モデルA（本人限定・各自のキー）**。B/Cの共有運用へ勝手に変更しない
 7. **日本語で書く**（画面の文言・ドキュメント・コメント）
 
 ## リポジトリ構成
 
 ```
-src/                 # GAS + Sheets の配布版。★まだ空。作る物はここだけ
+src/                 # GAS + Sheets の配布版。G3実装。配布コードはここ
 sample/speak-kit/    # Next.js 実装の実物コピー。★読む専用
 docs/                # 正本（構想が最上位）
 ```
 
 ## セットアップ / 主要コマンド
 
-`src/` が空のため、`Makefile` は starter の TODO のままである。**書いてあるコマンドが動く前提で作業しない。** 開発の道具立ては未決（構想 12 章 優先度A）。
+`src`で`npm run check`と`npm run test:browser`を実行する。env変更時は`npm run build:data`。Makefileはstarterのままなので使用しない。
 
 ## コーディング規約
 
@@ -49,7 +49,7 @@ docs/                # 正本（構想が最上位）
 設計・仕様・運用は `docs/` 配下を参照。更新規約と権威順位は `docs/00_index.md` に従う。
 仕様レベルの変更は連動するドキュメントを同一 PR でまとめて直し、構想を変えたら決定ログに 1 行残す。
 
-`docs/01_requirements.md` 〜 `docs/08_release_runbook.md` は starter の雛形のままである。**埋まっていないものを既定の仕様として読まない。**
+`docs/01_requirements.md` 〜 `docs/08_release_runbook.md`は現行G3実装に更新済み。実環境受入は別途必要。
 
 ## Codex / Claude Code
 
