@@ -94,13 +94,15 @@ function createAiApplication_(p) {
             );
         } else {
           if (feature === "grade") {
+            // 同じロック内で一度だけ読み、過去要求ごとのSheets全表読取を避ける。
+            const confirmed = new Set(repo.all("assessments").map((a) => a.id));
             const inflight = repo.all("ai_requests").find((other) => {
               if (
                 other.feature !== "grade" ||
                 !(
                   ["pending", "running", "unknown"].includes(other.state) ||
                   (other.state === "succeeded" &&
-                    !repo.find("assessments", "assessment-" + other.id))
+                    !confirmed.has("assessment-" + other.id))
                 )
               )
                 return false;

@@ -4,40 +4,43 @@ const QuizPolicy = {
     const sorted = attempts.filter((a) => a.response_mode === "choice").slice();
     const current = sorted.filter((a) => a.created_at > resetAt);
     const byId = new Map(items.map((i) => [i.id, i]));
-    const enriched = current.map((a, index) => ({
-      ...a,
-      seq: index + 1,
-      item: byId.get(a.item_id),
-    }));
-    const recent = enriched.slice(-3).map((a) => a.item?.skill_key);
+    // 教材×全履歴の再走査を避け、教材版を保持したまま一度だけ集計する。
+    const payloads = new Map(
+      items.map((i) => [i.id, JSON.parse(i.payload_json)]),
+    );
+    const historyByKey = new Map(),
+      unlocked = new Set(),
+      beforeResetKeys = new Set();
+    const recalledKeys = new Set(recalled);
+    const success = (a) =>
+      a && a.item && a.answer === payloads.get(a.item.id).correct;
+    const recent = current.slice(-3).map((a) => byId.get(a.item_id)?.skill_key);
+    current.forEach((a, index) => {
+      const item = byId.get(a.item_id);
+      if (!item) return;
+      const entry = { ...a, seq: index + 1, item };
+      const last = historyByKey.get(item.item_key)?.last;
+      historyByKey.set(item.item_key, { last: entry, prev: last });
+      if (
+        ["meaning", "intent"].includes(payloads.get(item.id).quizType) &&
+        success(entry)
+      )
+        unlocked.add(item.skill_key);
+    });
+    for (const a of sorted) {
+      const item = byId.get(a.item_id);
+      if (a.created_at <= resetAt && item && success({ ...a, item }))
+        beforeResetKeys.add(item.item_key);
+    }
     return items.map((item) => {
-      const payload = JSON.parse(item.payload_json);
-      const history = enriched.filter(
-        (a) => a.item?.item_key === item.item_key,
-      );
-      const last = history.at(-1),
-        prev = history.at(-2);
-      const success = (a) =>
-        a && a.item && a.answer === JSON.parse(a.item.payload_json).correct;
+      const payload = payloads.get(item.id);
+      const { last, prev } = historyByKey.get(item.item_key) || {};
       const stable = Boolean(
         success(last) && success(prev) && last.seq - prev.seq - 1 >= 3,
       );
       const gated =
-        payload.quizType === "form" &&
-        !enriched.some(
-          (a) =>
-            a.item?.skill_key === item.skill_key &&
-            ["meaning", "intent"].includes(
-              JSON.parse(a.item.payload_json).quizType,
-            ) &&
-            success(a),
-        );
-      const beforeReset = sorted.some(
-        (a) =>
-          a.created_at <= resetAt &&
-          byId.get(a.item_id)?.item_key === item.item_key &&
-          a.answer === JSON.parse(byId.get(a.item_id).payload_json).correct,
-      );
+        payload.quizType === "form" && !unlocked.has(item.skill_key);
+      const beforeReset = beforeResetKeys.has(item.item_key);
       const rank = [
         !last || current.length - last.seq >= 3 ? 0 : 1,
         last && !success(last)
@@ -49,7 +52,7 @@ const QuizPolicy = {
               : !last
                 ? 3
                 : 4,
-        recalled.includes(item.skill_key) ? 2 : 1,
+        recalledKeys.has(item.skill_key) ? 2 : 1,
         ["meaning", "intent"].includes(payload.quizType)
           ? 0
           : payload.quizType === "contrast"

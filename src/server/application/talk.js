@@ -11,19 +11,23 @@ function createTalkApplication_(p) {
       .filter((t) => t.session_id === id)
       .sort((a, b) => Number(a.sequence) - Number(b.sequence));
   }
+  // 読取またはロック区間ごとに作る。別の実行・AI呼出の前後では持ち越さない。
+  function aiIndex() {
+    return new Map(repo.all("ai_requests").map((r) => [r.id, r]));
+  }
   function present(id) {
     const s = session(id),
       turns = history(id);
+    const turnIds = new Set(turns.map((t) => t.id)),
+      ai = aiIndex();
     const pending = repo
       .all("talk_requests")
       .find(
         (r) =>
           r.session_id === id &&
           r.state === "pending" &&
-          !turns.some((t) => t.id === r.id) &&
-          !["failed", "abandoned"].includes(
-            repo.find("ai_requests", "turn-" + r.id)?.state,
-          ),
+          !turnIds.has(r.id) &&
+          !["failed", "abandoned"].includes(ai.get("turn-" + r.id)?.state),
       );
     const closing = repo.find("operations", "closing-" + id);
     return {
@@ -31,8 +35,7 @@ function createTalkApplication_(p) {
       scenario: s.scenario,
       state: s.state,
       turns,
-      openingState:
-        repo.find("ai_requests", "opening-" + id)?.state || "unreserved",
+      openingState: ai.get("opening-" + id)?.state || "unreserved",
       pendingTurn: pending
         ? {
             turn_id: pending.id,
@@ -42,9 +45,7 @@ function createTalkApplication_(p) {
         : null,
       closingRequestId:
         s.state === "closing" &&
-        !["failed", "abandoned"].includes(
-          repo.find("ai_requests", closing?.target_id)?.state,
-        )
+        !["failed", "abandoned"].includes(ai.get(closing?.target_id)?.state)
           ? closing?.target_id?.replace(/^end-/, "") || null
           : null,
       candidates: repo.all("candidates").filter((c) => c.session_id === id),
@@ -139,6 +140,8 @@ function createTalkApplication_(p) {
         if (s.state !== "open")
           throw new AppError("session_closed", "会話は終了しています。");
         const turns = history(sid);
+        const turnIds = new Set(turns.map((t) => t.id)),
+          requests = aiIndex();
         if (!turns.length)
           throw new AppError("busy", "会話開始の応答を確認してください。");
         for (const pending of repo
@@ -146,14 +149,10 @@ function createTalkApplication_(p) {
           .filter(
             (r) => r.session_id === sid && r.id !== id && r.state === "pending",
           )) {
-          if (repo.find("talk_turns", pending.id)) {
-            repo.update("talk_requests", pending.id, { state: "succeeded" });
-            continue;
-          }
-          const ai = repo.find("ai_requests", "turn-" + pending.id);
-          if (ai && ["failed", "abandoned"].includes(ai.state))
-            repo.update("talk_requests", pending.id, { state: ai.state });
-          else
+          // 過去の表示用状態を逐次修復しない。確定ターンとAI台帳が復旧判断の正本。
+          if (turnIds.has(pending.id)) continue;
+          const ai = requests.get("turn-" + pending.id);
+          if (!ai || !["failed", "abandoned"].includes(ai.state))
             throw new AppError(
               "busy",
               "前のメッセージを再送して結果を確認してください。結果不明なら中止後に送信できます。",
@@ -241,30 +240,33 @@ function createTalkApplication_(p) {
       const prepared = p.lock(() => {
         const s = session(sid);
         if (s.state === "closed") return { closed: true };
-        if (repo.find("talk_turns", "summary-" + sid)) {
+        const turns = history(sid),
+          turnIds = new Set(turns.map((t) => t.id));
+        if (turnIds.has("summary-" + sid)) {
           repo.update("talk_sessions", sid, {
             state: "closed",
             updated_at: p.iso(),
           });
           return { closed: true };
         }
+        const requests = aiIndex();
         const pending = repo
           .all("talk_requests")
           .filter(
             (r) =>
               r.session_id === sid &&
               r.state === "pending" &&
-              !repo.find("talk_turns", r.id),
+              !turnIds.has(r.id),
           );
         for (const r of pending) {
-          const ai = repo.find("ai_requests", "turn-" + r.id);
+          const ai = requests.get("turn-" + r.id);
           if (!ai || !["failed", "abandoned"].includes(ai.state))
             throw new AppError(
               "busy",
               "応答待ちのメッセージを解決してから終了してください。",
             );
         }
-        const opening = repo.find("ai_requests", "opening-" + sid);
+        const opening = requests.get("opening-" + sid);
         if (
           opening &&
           ["pending", "running", "unknown"].includes(opening.state)
@@ -273,13 +275,13 @@ function createTalkApplication_(p) {
             "busy",
             "開始要求の結果を確認または中止してください。",
           );
-        if (!opening && !history(sid).length)
+        if (!opening && !turns.length)
           throw new AppError("busy", "会話開始の応答を先に確認してください。");
         const opId = "closing-" + sid,
           old = repo.find("operations", opId);
         let effectiveId = rid;
         if (old) {
-          const ai = repo.find("ai_requests", old.target_id);
+          const ai = requests.get(old.target_id);
           if (!ai || !["failed", "abandoned"].includes(ai.state))
             effectiveId = old.target_id;
           else
@@ -304,7 +306,7 @@ function createTalkApplication_(p) {
         return {
           effectiveId,
           scenario: s.scenario,
-          history: history(sid)
+          history: turns
             .slice(-p.config().limits.historyTurns)
             .map((t) => ({ user: t.user_text, assistant: t.reply })),
         };

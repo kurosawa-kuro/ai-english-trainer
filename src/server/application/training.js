@@ -229,12 +229,14 @@ function createTrainingApplication_(p) {
         throw new AppError("not_found", "自由記述の回答がありません。");
       const id = "regrade-" + requireId_(request.regrade_id, 100);
       // 保存済みAI結果を先に確定する。古い採点の遅延確定で再判定を上書きしない。
+      // 候補の抽出は一括照合。grade/commitと新規AI予約では改めて最新状態を確認する。
+      const confirmed = new Set(repo.all("assessments").map((a) => a.id));
       for (const previous of repo.all("ai_requests")) {
         if (
           previous.feature !== "grade" ||
           previous.state !== "succeeded" ||
           JSON.parse(previous.snapshot_json).input.attemptId !== attempt.id ||
-          repo.find("assessments", "assessment-" + previous.id)
+          confirmed.has("assessment-" + previous.id)
         )
           continue;
         grade(attempt, item(attempt.item_id), previous.id, request.consent);
